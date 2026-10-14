@@ -1,0 +1,6 @@
+[packages]
+zap = "sleitnick/zap@0.4.0"
+profilestore = "loleris/profilestore@1.3.1"
+charm = "sleitnick/charm@0.3.0"
+vide = "sleitnick/vide@0.3.0"
+testez = "sleitnick/testez@0.4.0"

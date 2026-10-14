@@ -1,0 +1,13 @@
+{
+  "languageFeatures": {
+    "Luau": true
+  },
+  "globals": {
+    "game": "readonly",
+    "workspace": "readonly",
+    "script": "readonly"
+  },
+  "diagnostics": {
+    "unused": "warning"
+  }
+}

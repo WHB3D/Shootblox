@@ -1,0 +1,3 @@
+std = "roblox"
+allow_defined_top = true
+ignore = ["Packages/**", "*.spec.luau"]
