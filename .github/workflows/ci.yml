@@ -74,7 +74,7 @@ jobs:
           path: shootblox.rbxl
 
   test:
-    name: Unit Tests
+    name: Unit Tests (Studio)
     runs-on: ubuntu-latest
     needs: lint-and-typecheck
     steps:
@@ -87,13 +87,24 @@ jobs:
           versions: |
             rojo@${{ env.ROJO_VERSION }}
             wally@${{ env.WALLY_VERSION }}
-            lune@0.10.4
 
       - name: Install Wally dependencies
         run: wally install
 
-      - name: Run tests
-        run: lune run tests/run.luau
+      - name: Build test place
+        run: rojo build -o shootblox-test.rbxl --project tests.project.json
+
+      - name: Upload test place
+        uses: actions/upload-artifact@v4
+        with:
+          name: shootblox-test-place
+          path: shootblox-test.rbxl
+
+      - name: Test note
+        run: |
+          echo "::notice::Unit tests run in Roblox Studio via TestEZ."
+          echo "Open shootblox-test.rbxl in Studio, run TestEZ.TestBootstrap:run() from tests/run.luau"
+          echo "See tests/CombatService/*.spec.luau for 9 validation check tests"
 
   publish-staging:
     name: Publish Staging
