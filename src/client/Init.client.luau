@@ -8,11 +8,12 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MovementController = require(ReplicatedStorage.Client.Controllers.MovementController)
 local ViewmodelController = require(ReplicatedStorage.Client.Controllers.ViewmodelController)
+local GunController = require(ReplicatedStorage.Client.Controllers.GunController)
 
 local Controllers = {
 	MovementController,
 	ViewmodelController,
-	-- Add more: UIController, GunController, etc.
+	GunController,
 }
 
 for _, controller in Controllers do
