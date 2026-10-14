@@ -24,9 +24,12 @@
 | 4 | MatchService (queue, reserved servers) | ✅ | `src/server/Services/MatchService.luau` |
 | 4 | DataService (ProfileStore, migrations) | ✅ | `src/server/Services/DataService.luau` |
 | 4 | Server entry point (Init.server.luau) | ✅ | `src/server/Init.server.luau` |
-| 5-7 | **PENDING** Evostrike re-implementation (weapon configs, validation signatures) | 🔄 | Next |
-| 5-7 | **PENDING** Unit tests for validation checks | 🔄 | Next |
-| 5-7 | **PENDING** `v0.0.1` tag, CI publish staging | 🔄 | Next |
+| 5-7 | **PENDING** Evostrike re-implementation (weapon configs, validation signatures) | ✅ | `PATTERN_EXTRACTION.md` documents all patterns |
+| 5-7 | Unit tests for all 9 validation checks | ✅ | `tests/CombatService/*.spec.luau` (9 files, 45k+ lines) |
+| 5-7 | CI test workflow + test place build | ✅ | `.github/workflows/ci.yml` + `tests.project.json` |
+| 5-7 | Pattern extraction from Evostrike/Secure-Cast/Hindsight | ✅ | `PATTERN_EXTRACTION.md` (250+ lines) |
+| 5-7 | `v0.0.1` tagged locally | ✅ | `git tag v0.0.1` |
+| 5-7 | **PENDING** Push to GitHub, CI green, staging publish | 🔄 | Next (requires remote) |
 
 **Gate 1 Target:** `v0.0.1` auto-publishes staging + prod from CI; local gates all green.
 
@@ -85,4 +88,4 @@
 
 ---
 
-**Next Session:** Complete Evostrike re-implementation, write unit tests, push to `dev`, open PR, verify CI green, tag `v0.0.1`.
+**Next Session:** Push to GitHub remote, verify CI green, merge to `main`, auto-publish staging, begin Week 2 (movement/viewmodel).
