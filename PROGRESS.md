@@ -53,11 +53,26 @@
 
 ---
 
-## Week 3-4 (Core Combat) — PLANNED
+## Week 3 (Core Combat - Weapon Integration) — COMPLETE ✅
+
+| Task | Status |
+|------|--------|
+| GunController (fire loop, ammo prediction, reload, swap) | ✅ | `src/client/Controllers/GunController.luau` |
+| WeaponService (equip/unequip/swap, ammo, ownership) | ✅ | `src/server/Services/WeaponService.luau` |
+| ViewmodelController recoil integration | ✅ | `src/client/Controllers/ViewmodelController.luau` |
+| Net events: WeaponEquipRequest/UnequipRequest/Swap | ✅ | `src/shared/Net/init.luau` |
+| WeaponService added to server with dependencies | ✅ | `src/server/Init.server.luau` |
+| Client Init with GunController | ✅ | `src/client/Init.client.luau` |
+| UI system (ammo, health, crosshair, kill feed, scoreboard) | ✅ | `src/client/Controllers/UIController.luau` |
+| Net events: AmmoUpdate, HealthUpdate, KillFeed, Scoreboard | ✅ | `src/shared/Net/init.luau` |
+| CombatService UI event broadcasting | ✅ | `src/server/Services/CombatService.luau` |
+| Template base plays full round in Studio | 🔄 | Next: push, CI, test in Studio |
 | System inventory complete | 🔄 | Next |
 | CI green | 🔄 | Next |
 
 ---
+
+## Week 4 (Core Combat - Validation) — PLANNED
 
 ## Week 3-4 (Core Combat) — PLANNED
 
@@ -105,4 +120,4 @@
 
 ---
 
-**Next Session:** Push to GitHub remote, verify CI green, merge to `main`, auto-publish staging, test template base in Studio, begin Week 3 (movement/viewmodel integration).
+**Next Session:** Push to GitHub remote, verify CI green, merge to `main`, auto-publish staging, test template base + weapon system in Studio, begin Week 4 (lag comp integration, hit validation with movement).
