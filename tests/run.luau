@@ -11,6 +11,9 @@ local TestEZ = require(ReplicatedStorage.Packages.TestEZ)
 
 -- Test modules to run
 local testModules = {
+	-- Lag compensation (Week 4)
+	script.Parent.LagCompensation,
+	-- Combat validation (Week 1, updated for 11-step pipeline)
 	script.Parent.CombatService.OriginValidation,
 	script.Parent.CombatService.FireRateValidation,
 	script.Parent.CombatService.AngleValidation,

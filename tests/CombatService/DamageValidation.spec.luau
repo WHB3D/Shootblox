@@ -17,6 +17,7 @@ local function createMockRequest(weaponId: string, range: number, headshot: bool
 		Headshot = headshot,
 		Timestamp = os.clock(),
 		ServerTick = workspace:GetServerTimeNow(),
+		ShotId = "test"
 	}
 end
 

@@ -72,7 +72,20 @@
 
 ---
 
-## Week 4 (Core Combat - Validation) — PLANNED
+## Week 4 (Core Combat - Validation) — IN PROGRESS
+
+| Task | Status |
+|------|--------|
+| Lag compensation: rewind buffer wired to movement | 🔄 |
+| Hit validation with movement prediction | 🔄 |
+| 200ms ping simulation test | 🔄 |
+| Bot AI (spawn, move, aim, fire) | 🔄 |
+| Wallbang rejection test | 🔄 |
+| Heartbeat ≤ 8ms budget | 🔄 |
+| Studio playtest: full combat loop | 🔄 |
+
+**Gate 3 Target:** Spoofed FireEvent deals 0 damage; legit shots kill; rejects logged
+**Gate 4 Target:** Hits register at 200 ms ping; wallbangs rejected; Heartbeat ≤ 8 ms
 
 ## Week 3-4 (Core Combat) — PLANNED
 

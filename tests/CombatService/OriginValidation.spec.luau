@@ -28,6 +28,7 @@ local function createMockRequest(origin: Vector3)
 		Direction = Vector3.new(0, 0, -1),
 		Timestamp = os.clock(),
 		ServerTick = workspace:GetServerTimeNow(),
+		ShotId = "test"
 	}
 end
 
@@ -58,14 +59,14 @@ Tests["Origin check passes when drift is within tolerance"] = function()
 	local player = createMockPlayer("TestPlayer", Vector3.new(0, 5, 0))
 	local request = createMockRequest(Vector3.new(0.5, 5, 0.5)) -- ~0.7 stud drift
 	local result = checkOrigin(player, request)
-	TestEZ.assert(result.Valid == true, "Should pass with drift < 12 studs")
+	TestEZ.assert(result.Valid == true, "Should pass with drift < 5 studs")
 end
 
 Tests["Origin check fails when drift exceeds tolerance"] = function()
 	local player = createMockPlayer("TestPlayer", Vector3.new(0, 5, 0))
-	local request = createMockRequest(Vector3.new(20, 5, 0)) -- 20 stud drift > 12
+	local request = createMockRequest(Vector3.new(20, 5, 0)) -- 20 stud drift > 5
 	local result = checkOrigin(player, request)
-	TestEZ.assert(result.Valid == false, "Should fail with drift > 12 studs")
+	TestEZ.assert(result.Valid == false, "Should fail with drift > 5 studs")
 	TestEZ.assert(result.RejectReason == "INVALID_ORIGIN", "Should return INVALID_ORIGIN code")
 end
 
@@ -94,9 +95,9 @@ end
 
 Tests["Origin check passes at exactly tolerance boundary"] = function()
 	local player = createMockPlayer("TestPlayer", Vector3.new(0, 5, 0))
-	local request = createMockRequest(Vector3.new(12, 5, 0)) -- exactly 12 studs
+	local request = createMockRequest(Vector3.new(5, 5, 0)) -- exactly 5 studs
 	local result = checkOrigin(player, request)
-	TestEZ.assert(result.Valid == true, "Should pass at exactly 12 studs")
+	TestEZ.assert(result.Valid == true, "Should pass at exactly 5 studs")
 end
 
 return Tests

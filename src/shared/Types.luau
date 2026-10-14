@@ -119,6 +119,7 @@ export type ShotRequest = {
 	HitNormal: Vector3?,
 	Timestamp: number, -- client tick
 	ServerTick: number,
+	ShotId: string, -- unique per-shot identifier
 }
 
 export type ValidationResult = {

@@ -28,6 +28,7 @@ local function createMockRequest(direction: Vector3)
 		Direction = direction,
 		Timestamp = os.clock(),
 		ServerTick = workspace:GetServerTimeNow(),
+		ShotId = "test"
 	}
 end
 

@@ -1,7 +1,7 @@
 --!strict
 --[[
 	SHOOTBLOX — Server-Authoritative Combat Service
-	9-check validation pipeline: the moat we deeply own.
+	11-step validation pipeline per Blueprint §5.1.1/§5.1.2.
 	Client sends intent + evidence; server derives and decides.
 ]]
 
@@ -13,24 +13,31 @@ local Types = require(ReplicatedStorage.Shared.Types)
 local CombatConfig = require(ReplicatedStorage.Shared.Config.Combat)
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 local Net = require(ReplicatedStorage.Shared.Net)
+local HitboxHistory = require(script.Parent.HitboxHistory)
+local RateLimiter = require(script.Parent.RateLimiter)
 
 local CombatService = {}
 
 function CombatService.SetDependencies(deps)
-	-- Store dependencies if needed
+	-- Dependencies: Data, Match, Movement, Weapon
 end
 
--- Position history for lag compensation (rewind)
-local PositionHistory: { [Player]: { { Tick: number, CFrames: { [string]: CFrame } } } } = {}
-local SERVER_TICK_RATE = 50
-local TICK_INTERVAL = 1 / SERVER_TICK_RATE
+-- Pipeline constants (Blueprint §5.1.2)
+local MAX_LATENCY = 0.8 -- seconds
+local ORIGIN_TOLERANCE = 5 -- studs
+local HIT_TOLERANCE_BASE = 10 -- studs
+local INTERPOLATION_BUFFER = 0.08 -- seconds
+local DIRECTION_ANGLE_TOLERANCE = 5 -- degrees
 
 -- Validation result codes
 local ValidationCode = {
 	OK = "OK",
-	InvalidOrigin = "INVALID_ORIGIN",
+	InvalidShape = "INVALID_SHAPE",
+	InvalidState = "INVALID_STATE",
 	InvalidRate = "INVALID_RATE",
-	InvalidAngle = "INVALID_ANGLE",
+	InvalidTimestamp = "INVALID_TIMESTAMP",
+	InvalidOrigin = "INVALID_ORIGIN",
+	InvalidDirection = "INVALID_DIRECTION",
 	InvalidTarget = "INVALID_TARGET",
 	InvalidDamage = "INVALID_DAMAGE",
 	InvalidAmmo = "INVALID_AMMO",
@@ -39,48 +46,18 @@ local ValidationCode = {
 	OnCooldown = "ON_COOLDOWN",
 }
 
--- Initialize position history tracking
+-- Track last accepted shot per player per weapon (for rate validation)
+local LastAcceptedShot: { [Player]: { [string]: number } } = {}
+
 function CombatService.Init()
-	RunService.Heartbeat:Connect(function(dt)
-		local tick = workspace:GetServerTimeNow()
-		for _, player in Players:GetPlayers() do
-			local character = player.Character
-			if character then
-				local hrp = character:FindFirstChild("HumanoidRootPart")
-				local head = character:FindFirstChild("Head")
-				if hrp and head then
-					local history = PositionHistory[player]
-					if not history then
-						history = {}
-						PositionHistory[player] = history
-					end
-					table.insert(history, {
-						Tick = tick,
-						CFrames = {
-							HRP = hrp.CFrame,
-							Head = head.CFrame,
-						},
-					})
-					-- Trim old history
-					while #history > CombatConfig.Tolerances.RewindBufferSize do
-						table.remove(history, 1)
-					end
-				end
-			end
-		end
-	end)
+	HitboxHistory.Init()
+	RateLimiter.Init()
 
 	-- Handle incoming fire requests
 	Net.ClientToServer.Fire:Connect(function(player: Player, request: Types.ShotRequest)
 		local result = CombatService.ValidateShot(player, request)
 		if result.Valid then
-			CombatService.ApplyDamage(player, result)
-			Net.ServerFire(player, "HitConfirm", {
-				WeaponId = request.WeaponId,
-				Damage = result.Damage,
-				HitPosition = result.HitPosition,
-				Headshot = result.Headshot or false,
-			})
+			CombatService.ApplyDamage(player, result, request)
 		else
 			Net.ServerFire(player, "Error", {
 				Code = result.RejectReason,
@@ -89,188 +66,182 @@ function CombatService.Init()
 		end
 	end)
 
-	print("[CombatService] Initialized - 9-check validation active")
+	-- Reload handling
+	Net.ClientToServer.Reload:Connect(function(player: Player, data: { WeaponId: string })
+		local weapon = Weapons.Get(data.WeaponId)
+		if not weapon then return end
+
+		player:SetAttribute("Ammo_" .. data.WeaponId, weapon.MagSize)
+		Net.ServerFire(player, "Reloaded", { WeaponId = data.WeaponId, Ammo = weapon.MagSize })
+	end)
+
+	print("[CombatService] Initialized - 11-step validation pipeline active")
 end
 
--- THE 9-CHECK VALIDATION PIPELINE
+-- THE 11-STEP VALIDATION PIPELINE (Blueprint §5.1.1)
 function CombatService.ValidateShot(player: Player, request: Types.ShotRequest): Types.ValidationResult
 	local weapon = Weapons.Get(request.WeaponId)
 	if not weapon then
-		return { Valid = false, RejectReason = ValidationCode.InvalidDamage }
+		return { Valid = false, RejectReason = ValidationCode.InvalidShape }
 	end
 
-	-- 1. ORIGIN CHECK: claimed origin vs actual head position
-	local originCheck = CombatService.CheckOrigin(player, request)
-	if not originCheck.Valid then
-		return originCheck
+	-- STEP 1: Type & shape (NaN check)
+	if typeof(request.Origin) ~= "Vector3" or request.Origin ~= request.Origin then
+		return { Valid = false, RejectReason = ValidationCode.InvalidShape }
+	end
+	if typeof(request.Direction) ~= "Vector3" or request.Direction ~= request.Direction then
+		return { Valid = false, RejectReason = ValidationCode.InvalidShape }
+	end
+	if typeof(request.Timestamp) ~= "number" or request.Timestamp ~= request.Timestamp then
+		return { Valid = false, RejectReason = ValidationCode.InvalidShape }
 	end
 
-	-- 2. FIRE RATE CHECK: server-enforced cooldown
-	local rateCheck = CombatService.CheckFireRate(player, request, weapon)
-	if not rateCheck.Valid then
-		return rateCheck
+	-- STEP 2: State - alive, character exists, weapon equipped
+	local character = player.Character
+	if not character then
+		return { Valid = false, RejectReason = ValidationCode.InvalidState }
+	end
+	local head = character:FindFirstChild("Head")
+	if not head then
+		return { Valid = false, RejectReason = ValidationCode.InvalidState }
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	if not humanoid or humanoid.Health <= 0 then
+		return { Valid = false, RejectReason = ValidationCode.InvalidState }
 	end
 
-	-- 3. ANGLE CHECK: claimed direction vs actual look vector
-	local angleCheck = CombatService.CheckAngle(player, request)
-	if not angleCheck.Valid then
-		return angleCheck
+	-- STEP 3: Rate of fire (token bucket via RateLimiter)
+	if not RateLimiter.AcceptShot(player, weapon.FireRate) then
+		return { Valid = false, RejectReason = ValidationCode.InvalidRate }
 	end
 
-	-- 4. TARGET CHECK: validate hit position against rewind
-	local targetCheck = CombatService.CheckTarget(player, request)
-	if not targetCheck.Valid then
-		return targetCheck
+	-- STEP 4: Timestamp window
+	local latency = workspace:GetServerTimeNow() - request.Timestamp
+	if latency < 0 or latency > MAX_LATENCY then
+		return { Valid = false, RejectReason = ValidationCode.InvalidTimestamp }
 	end
 
-	-- 5. DAMAGE CHECK: validate damage matches weapon config at range
-	local damageCheck = CombatService.CheckDamage(player, request, weapon)
-	if not damageCheck.Valid then
-		return damageCheck
+	-- STEP 5: Origin sanity (≤ 5 studs from server-known head)
+	local originDrift = (request.Origin - head.Position).Magnitude
+	if originDrift > ORIGIN_TOLERANCE then
+		CombatService.FlagSuspicion(player, "ORIGIN_MISMATCH", { Drift = originDrift })
+		return { Valid = false, RejectReason = ValidationCode.InvalidOrigin }
 	end
 
-	-- 6. AMMO CHECK: server-authoritative ammo tracking
-	local ammoCheck = CombatService.CheckAmmo(player, request, weapon)
-	if not ammoCheck.Valid then
-		return ammoCheck
+	-- STEP 6: Direction sanity (angle between reported direction and muzzle→hit)
+	if request.HitPosition then
+		local toHit = (request.HitPosition - request.Origin).Unit
+		local angle = math.deg(math.acos(math.clamp(request.Direction:Dot(toHit), -1, 1)))
+		if angle > DIRECTION_ANGLE_TOLERANCE then
+			CombatService.FlagSuspicion(player, "DIRECTION_MISMATCH", { Angle = angle })
+			return { Valid = false, RejectReason = ValidationCode.InvalidDirection }
+		end
 	end
 
-	-- 7. RANGE CHECK: target within weapon effective range
-	local rangeCheck = CombatService.CheckRange(player, request, weapon)
-	if not rangeCheck.Valid then
-		return rangeCheck
+	-- STEP 7: Hit validation (rewind → server raycast → compare)
+	local targetResult = CombatService.ValidateTarget(player, request, weapon, latency)
+	if not targetResult.Valid then
+		return targetResult
 	end
 
-	-- 8. LINE OF SIGHT CHECK: raycast from validated origin
-	local losCheck = CombatService.CheckLOS(player, request, weapon)
-	if not losCheck.Valid then
-		return losCheck
+	-- STEP 8: Range validation
+	local range = (targetResult.HitPosition - request.Origin).Magnitude
+	if range > weapon.Range then
+		return { Valid = false, RejectReason = ValidationCode.InvalidRange }
 	end
 
-	-- 9. COOLDOWN CHECK: global shot throttling
-	local cooldownCheck = CombatService.CheckCooldown(player, request)
-	if not cooldownCheck.Valid then
-		return cooldownCheck
+	-- STEP 9: Line of sight
+	local losResult = CombatService.CheckLOS(player, request, weapon, targetResult.HitPosition)
+	if not losResult.Valid then
+		return losResult
+	end
+
+	-- STEP 10: Damage calculation
+	local damageResult = CombatService.CalculateDamage(weapon, range, targetResult.Headshot)
+	if not damageResult.Valid then
+		return damageResult
+	end
+
+	-- STEP 11: Ammo (server-authoritative)
+	local ammoResult = CombatService.CheckAmmo(player, request, weapon)
+	if not ammoResult.Valid then
+		return ammoResult
 	end
 
 	-- ALL CHECKS PASSED
 	return {
 		Valid = true,
-		Damage = damageCheck.Damage,
-		HitPosition = targetCheck.HitPosition,
-		HitNormal = targetCheck.HitNormal,
-		Headshot = targetCheck.Headshot,
+		Damage = damageResult.Damage,
+		HitPosition = targetResult.HitPosition,
+		HitNormal = targetResult.HitNormal,
+		Headshot = targetResult.Headshot,
 	}
 end
 
--- CHECK 1: Origin Validation
-function CombatService.CheckOrigin(player: Player, request: Types.ShotRequest)
-	local character = player.Character
-	if not character then
-		return { Valid = false, RejectReason = ValidationCode.InvalidOrigin }
-	end
-	local head = character:FindFirstChild("Head")
-	if not head then
-		return { Valid = false, RejectReason = ValidationCode.InvalidOrigin }
-	end
-
-	local actualOrigin = head.Position
-	local drift = (actualOrigin - request.Origin).Magnitude
-
-	if drift > CombatConfig.Tolerances.MaxOriginDrift then
-		warn(string.format("[CombatService] Origin drift: %s drift=%.1f", player.Name, drift))
-		return { Valid = false, RejectReason = ValidationCode.InvalidOrigin }
-	end
-
-	return { Valid = true }
-end
-
--- CHECK 2: Fire Rate Validation
-function CombatService.CheckFireRate(player: Player, request: Types.ShotRequest, weapon: Types.WeaponConfig)
-	local minInterval = 1 / weapon.FireRate
-	local jitter = CombatConfig.Tolerances.FireRateJitterWindow
-	local effectiveInterval = minInterval - jitter
-
-	-- Get player's last fire time for this weapon
-	local lastFire = player:GetAttribute("LastFire_" .. request.WeaponId) or 0
-	local now = workspace:GetServerTimeNow()
-
-	if now - lastFire < effectiveInterval then
-		return { Valid = false, RejectReason = ValidationCode.InvalidRate }
-	end
-
-	-- Update last fire time
-	player:SetAttribute("LastFire_" .. request.WeaponId, now)
-	return { Valid = true }
-end
-
--- CHECK 3: Angle Validation
-function CombatService.CheckAngle(player: Player, request: Types.ShotRequest)
-	local character = player.Character
-	if not character then
-		return { Valid = false, RejectReason = ValidationCode.InvalidAngle }
-	end
-	local head = character:FindFirstChild("Head")
-	if not head then
-		return { Valid = false, RejectReason = ValidationCode.InvalidAngle }
-	end
-
-	-- Actual look direction from head
-	local actualDirection = head.CFrame.LookVector
-	local claimedDirection = request.Direction
-	local angle = math.deg(math.acos(math.clamp(actualDirection:Dot(claimedDirection), -1, 1)))
-
-	if angle > CombatConfig.Tolerances.ClaimMaxAngleDeg then
-		warn(string.format("[CombatService] Angle cheat: %s angle=%.1f", player.Name, angle))
-		return { Valid = false, RejectReason = ValidationCode.InvalidAngle }
-	end
-
-	return { Valid = true }
-end
-
--- CHECK 4: Target Validation (Rewind/Lag Compensation)
-function CombatService.CheckTarget(player: Player, request: Types.ShotRequest)
+-- STEP 7: Hit validation with rewind
+function CombatService.ValidateTarget(player: Player, request: Types.ShotRequest, weapon: Types.WeaponConfig, latency: number)
 	if not request.Target or not request.HitPosition then
 		return { Valid = false, RejectReason = ValidationCode.InvalidTarget }
 	end
 
-	-- Find target player
 	local targetPlayer = Players:GetPlayerFromCharacter(request.Target)
 	if not targetPlayer then
 		return { Valid = false, RejectReason = ValidationCode.InvalidTarget }
 	end
 
-	-- Get target's position history at request timestamp
-	local history = PositionHistory[targetPlayer]
-	if not history or #history == 0 then
+	-- Compute rewind time: when the shooter saw the target
+	local rewindTime = request.Timestamp - (player:GetNetworkPing() / 1000 + INTERPOLATION_BUFFER)
+
+	-- Get target's hitboxes at rewind time
+	local rewoundCFrames = HitboxHistory.RewindTo(targetPlayer, rewindTime)
+	if not rewoundCFrames then
 		return { Valid = false, RejectReason = ValidationCode.InvalidTarget }
 	end
 
-	-- Find closest history tick to request.ServerTick
-	local bestEntry = history[1]
-	local bestDiff = math.abs(history[1].Tick - request.ServerTick)
-	for i = 2, #history do
-		local diff = math.abs(history[i].Tick - request.ServerTick)
-		if diff < bestDiff then
-			bestDiff = diff
-			bestEntry = history[i]
-		end
+	-- Get rewound head position
+	local rewoundHeadCF = rewoundCFrames["Head"] or rewoundCFrames["UpperTorso"]
+	if not rewoundHeadCF then
+		return { Valid = false, RejectReason = ValidationCode.InvalidTarget }
 	end
 
-	-- Rewind target to that tick and validate hit
-	local rewoundHeadCF = bestEntry.CFrames.Head
 	local rewoundHeadPos = rewoundHeadCF.Position
-	local drift = (rewoundHeadPos - request.HitPosition).Magnitude
 
-	if drift > CombatConfig.Tolerances.ClaimMaxTargetDrift then
-		warn(string.format("[CombatService] Target drift: %s -> %s drift=%.1f", player.Name, targetPlayer.Name, drift))
+	-- Server raycast from shooter's origin toward direction
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { player.Character }
+
+	local rayResult = workspace:Raycast(request.Origin, request.Direction * weapon.Range, raycastParams)
+
+	-- If server raycast hit the same character, accept
+	local serverHitChar = nil
+	if rayResult then
+		serverHitChar = rayResult.Instance:FindFirstAncestorOfClass("Model")
+	end
+
+	if serverHitChar and serverHitChar ~= targetPlayer.Character then
+		-- Server sees a different character in the way
 		return { Valid = false, RejectReason = ValidationCode.InvalidTarget }
 	end
 
-	-- Determine hit group from rewound position
+	-- Compare client hit position with rewound head position
+	-- Tolerance: 10 studs + targetVelocity × latency
+	local targetVelocity = request.Target:FindFirstChild("HumanoidRootPart")
+		and request.Target.HumanoidRootPart.AssemblyLinearVelocity.Magnitude or 0
+	local tolerance = HIT_TOLERANCE_BASE + targetVelocity * latency
+
+	local drift = (rewoundHeadPos - request.HitPosition).Magnitude
+	if drift > tolerance then
+		CombatService.FlagSuspicion(player, "HIT_MISMATCH", {
+			Drift = drift,
+			Tolerance = tolerance,
+			Latency = latency,
+		})
+		return { Valid = false, RejectReason = ValidationCode.InvalidTarget }
+	end
+
+	-- Determine headshot from rewound position
 	local headshot = false
-	local hitNormal = Vector3.new(0, 1, 0)
-	-- Simplified: check if hit position is near head
 	if (rewoundHeadPos - request.HitPosition).Magnitude < 3 then
 		headshot = true
 	end
@@ -278,18 +249,46 @@ function CombatService.CheckTarget(player: Player, request: Types.ShotRequest)
 	return {
 		Valid = true,
 		HitPosition = rewoundHeadPos,
-		HitNormal = hitNormal,
+		HitNormal = rayResult and rayResult.Normal or Vector3.new(0, 1, 0),
 		Headshot = headshot,
 	}
 end
 
--- CHECK 5: Damage Validation
-function CombatService.CheckDamage(player: Player, request: Types.ShotRequest, weapon: Types.WeaponConfig)
+-- STEP 9: Line of sight
+function CombatService.CheckLOS(player: Player, request: Types.ShotRequest, weapon: Types.WeaponConfig, hitPosition: Vector3)
+	local raycastParams = RaycastParams.new()
+	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
+	raycastParams.FilterDescendantsInstances = { player.Character }
+	raycastParams.IgnoreWater = true
+
+	local direction = (hitPosition - request.Origin).Unit
+	local distance = (hitPosition - request.Origin).Magnitude
+
+	local result = workspace:Raycast(request.Origin, direction * distance, raycastParams)
+
+	if result then
+		-- Check if we hit something before the target
+		local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
+		if hitChar and hitChar ~= request.Target then
+			-- Hit something else first - check if penetrable
+			if result.Material ~= Enum.Material.Glass and result.Material ~= Enum.Material.Plastic then
+				CombatService.FlagSuspicion(player, "WALL_BLOCKED", {
+					Material = tostring(result.Material),
+				})
+				return { Valid = false, RejectReason = ValidationCode.InvalidLOS }
+			end
+		end
+	end
+
+	return { Valid = true }
+end
+
+-- STEP 10: Damage calculation
+function CombatService.CalculateDamage(weapon: Types.WeaponConfig, range: number, headshot: boolean)
 	local baseDamage = weapon.Damage
-	local range = (request.HitPosition - request.Origin).Magnitude
+	local multiplier = 1.0
 
 	-- Apply damage dropoff
-	local multiplier = 1.0
 	if weapon.DamageDropoff then
 		local sortedRanges = {}
 		for r in weapon.DamageDropoff do
@@ -303,14 +302,13 @@ function CombatService.CheckDamage(player: Player, request: Types.ShotRequest, w
 				break
 			end
 		end
-		-- Beyond max range
 		if range > sortedRanges[#sortedRanges] then
 			multiplier = CombatConfig.Tolerances.MinDamagePercent
 		end
 	end
 
-	-- Apply headshot multiplier if validated
-	if request.Headshot then
+	-- Apply headshot multiplier
+	if headshot then
 		multiplier *= weapon.HeadshotMultiplier
 	end
 
@@ -319,109 +317,77 @@ function CombatService.CheckDamage(player: Player, request: Types.ShotRequest, w
 
 	-- Validate against weapon max possible damage
 	local maxPossible = weapon.Damage * weapon.HeadshotMultiplier
-	if finalDamage > maxPossible * 1.1 then -- 10% tolerance
+	if finalDamage > maxPossible * 1.1 then
 		return { Valid = false, RejectReason = ValidationCode.InvalidDamage }
 	end
 
 	return { Valid = true, Damage = finalDamage }
 end
 
--- CHECK 6: Ammo Validation
+-- STEP 11: Ammo
 function CombatService.CheckAmmo(player: Player, request: Types.ShotRequest, weapon: Types.WeaponConfig)
-	-- Server-authoritative ammo tracking
 	local currentAmmo = player:GetAttribute("Ammo_" .. request.WeaponId) or weapon.MagSize
 	if currentAmmo <= 0 then
 		return { Valid = false, RejectReason = ValidationCode.InvalidAmmo }
 	end
 
-	-- Decrement
 	player:SetAttribute("Ammo_" .. request.WeaponId, currentAmmo - 1)
 	return { Valid = true }
 end
 
--- CHECK 7: Range Validation
-function CombatService.CheckRange(player: Player, request: Types.ShotRequest, weapon: Types.WeaponConfig)
-	local range = (request.HitPosition - request.Origin).Magnitude
-	if range > weapon.Range + 10 then -- 10 stud tolerance
-		return { Valid = false, RejectReason = ValidationCode.InvalidRange }
-	end
-	return { Valid = true }
-end
-
--- CHECK 8: Line of Sight Validation
-function CombatService.CheckLOS(player: Player, request: Types.ShotRequest, weapon: Types.WeaponConfig)
-	local raycastParams = RaycastParams.new()
-	raycastParams.FilterType = Enum.RaycastFilterType.Exclude
-	raycastParams.FilterDescendantsInstances = { player.Character }
-	raycastParams.IgnoreWater = true
-
-	local result = workspace:Raycast(request.Origin, request.Direction * weapon.Range, raycastParams)
-
-	if not result then
-		-- No hit at all - only valid if hitting a player (handled in CheckTarget)
-		if not request.Target then
-			return { Valid = false, RejectReason = ValidationCode.InvalidLOS }
-		end
-	end
-
-	-- If we hit something before the target, reject
-	if result and result.Instance then
-		local hitChar = result.Instance:FindFirstAncestorOfClass("Model")
-		if hitChar and hitChar ~= request.Target then
-			-- Hit something else first - check if it's penetrable
-			if result.Material ~= Enum.Material.Glass and result.Material ~= Enum.Material.Plastic then
-				return { Valid = false, RejectReason = ValidationCode.InvalidLOS }
-			end
-		end
-	end
-
-	return { Valid = true }
-end
-
--- CHECK 9: Global Cooldown / Anti-Spam
-function CombatService.CheckCooldown(player: Player, request: Types.ShotRequest)
-	local shotsThisTick = player:GetAttribute("ShotsThisTick") or 0
-	if shotsThisTick >= CombatConfig.Tolerances.MaxShotsPerTick then
-		return { Valid = false, RejectReason = ValidationCode.OnCooldown }
-	end
-	player:SetAttribute("ShotsThisTick", shotsThisTick + 1)
-	return { Valid = true }
-end
-
 -- Apply validated damage
-function CombatService.ApplyDamage(attacker: Player, result: Types.ValidationResult)
-	-- Find target from the validation (we need to track this)
-	-- For now, we'll use a simplified approach
-	-- In a full implementation, we'd track the target from validation
-	
+function CombatService.ApplyDamage(attacker: Player, result: Types.ValidationResult, request: Types.ShotRequest)
+	if not request.Target then return end
+
+	local targetChar = request.Target:FindFirstAncestorOfClass("Model")
+	if not targetChar then return end
+
+	local humanoid = targetChar:FindFirstChildOfClass("Humanoid")
+	if not humanoid then return end
+
+	-- Apply damage (server-authoritative)
+	humanoid:TakeDamage(result.Damage)
+
 	-- Send hit confirmation to attacker
 	Net.ServerFire(attacker, "HitConfirm", {
-		WeaponId = "Unknown", -- Would be passed from validation
+		WeaponId = request.WeaponId,
 		Damage = result.Damage,
 		HitPosition = result.HitPosition,
 		Headshot = result.Headshot or false,
 	})
 
 	-- Send ammo update to attacker
-	local currentAmmo = attacker:GetAttribute("Ammo_Current") or 0
-	local reserveAmmo = attacker:GetAttribute("Ammo_Reserve") or 0
+	local currentAmmo = attacker:GetAttribute("Ammo_" .. request.WeaponId) or 0
 	Net.ServerFire(attacker, "AmmoUpdate", {
 		Current = currentAmmo,
-		Reserve = reserveAmmo,
+		Reserve = attacker:GetAttribute("Ammo_Reserve_" .. request.WeaponId) or 0,
 	})
 
-	-- TODO: Apply damage to target, handle kill feed
-	-- This would integrate with MatchService and DataService
-	print(string.format("[CombatService] Valid hit: damage=%.0f headshot=%s", result.Damage, tostring(result.Headshot)))
+	-- Send health update to victim
+	Net.ServerFire(Players:GetPlayerFromCharacter(targetChar), "HealthUpdate", {
+		Current = humanoid.Health,
+		Max = humanoid.MaxHealth,
+	})
+
+	-- Kill feed
+	if humanoid.Health <= 0 then
+		Net.Broadcast("KillFeed", {
+			Killer = attacker.Name,
+			Victim = targetChar.Name,
+			Weapon = request.WeaponId,
+			Headshot = result.Headshot or false,
+		})
+	end
+
+	-- Log for analytics
+	print(string.format("[CombatService] %s -> %s: %.0f dmg (headshot=%s)",
+		attacker.Name, targetChar.Name, result.Damage, tostring(result.Headshot)))
 end
 
--- Reload handling
-Net.ClientToServer.Reload:Connect(function(player: Player, data: { WeaponId: string })
-	local weapon = Weapons.Get(data.WeaponId)
-	if not weapon then return end
-
-	player:SetAttribute("Ammo_" .. data.WeaponId, weapon.MagSize)
-	Net.ServerFire(player, "Reloaded", { WeaponId = data.WeaponId, Ammo = weapon.MagSize })
-end)
+-- Anti-cheat suspicion flagging
+function CombatService.FlagSuspicion(player: Player, reason: string, details: any)
+	warn(string.format("[CombatService] Suspicion: %s - %s (%s)", player.Name, reason, details))
+	-- TODO: Integrate with DataService strike system
+end
 
 return CombatService

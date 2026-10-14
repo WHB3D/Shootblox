@@ -40,6 +40,7 @@ local function createMockRequest(weaponId: string, target, hitPosition: Vector3?
 		HitPosition = hitPosition,
 		Timestamp = os.clock(),
 		ServerTick = workspace:GetServerTimeNow(),
+		ShotId = "test"
 	}
 end
 
