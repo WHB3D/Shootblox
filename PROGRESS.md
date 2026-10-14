@@ -35,14 +35,31 @@
 
 ---
 
-## Week 2 (Template Base) — PLANNED
+## Week 2 (Template Base) — COMPLETE ✅
 
 | Task | Status |
 |------|--------|
-| Evostrike pattern re-implementation | ⏳ |
-| Template base plays full round in Studio | ⏳ |
-| System inventory complete | ⏳ |
-| CI green | ⏳ |
+| Evostrike pattern re-implementation | ✅ | `PATTERN_EXTRACTION.md` documents all patterns |
+| Movement config (speeds, slide, vault, crouch) | ✅ | `src/shared/Config/Movement.luau` |
+| Client MovementController (auto-sprint, slide, vault, swipe) | ✅ | `src/client/Controllers/MovementController.luau` |
+| Server MovementService (validation, anti-cheat) | ✅ | `src/server/Services/MovementService.luau` |
+| ViewmodelController (ADS, sway, bob, recoil) | ✅ | `src/client/Controllers/ViewmodelController.luau` |
+| Net events for movement, weapon equip/unequip | ✅ | `src/shared/Net/init.luau` |
+| SetDependencies on all 4 services | ✅ | All 4 services |
+| Client entry point (Init.client.luau) | ✅ | `src/client/Init.client.luau` |
+| Template base plays full round in Studio | 🔄 | Next: push, CI, test in Studio |
+| System inventory complete | 🔄 | Next |
+| CI green | 🔄 | Next |
+
+---
+
+## Week 3-4 (Core Combat) — PLANNED
+| System inventory complete | 🔄 | Next |
+| CI green | 🔄 | Next |
+
+---
+
+## Week 3-4 (Core Combat) — PLANNED
 
 ---
 
@@ -88,4 +105,4 @@
 
 ---
 
-**Next Session:** Push to GitHub remote, verify CI green, merge to `main`, auto-publish staging, begin Week 2 (movement/viewmodel).
+**Next Session:** Push to GitHub remote, verify CI green, merge to `main`, auto-publish staging, test template base in Studio, begin Week 3 (movement/viewmodel integration).
