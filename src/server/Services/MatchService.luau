@@ -16,6 +16,10 @@ local Net = require(ReplicatedStorage.Shared.Net)
 
 local MatchService = {}
 
+function MatchService.SetDependencies(deps)
+	-- Store dependencies if needed
+end
+
 -- Active matches and queues
 local ActiveMatches: { [string]: Types.MatchState } = {}
 local Queues: { [string]: { Player } } = {

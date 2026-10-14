@@ -16,6 +16,10 @@ local Net = require(ReplicatedStorage.Shared.Net)
 
 local CombatService = {}
 
+function CombatService.SetDependencies(deps)
+	-- Store dependencies if needed
+end
+
 -- Position history for lag compensation (rewind)
 local PositionHistory: { [Player]: { { Tick: number, CFrames: { [string]: CFrame } } } } = {}
 local SERVER_TICK_RATE = 50

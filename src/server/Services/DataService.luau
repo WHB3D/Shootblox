@@ -13,6 +13,10 @@ local Economy = require(ReplicatedStorage.Shared.Config.Economy)
 
 local DataService = {}
 
+function DataService.SetDependencies(deps)
+	-- Store dependencies if needed
+end
+
 local ProfileStoreInstance = ProfileStore.New("PlayerData_v1", {
 	Coins = 0,
 	Keys = 0,

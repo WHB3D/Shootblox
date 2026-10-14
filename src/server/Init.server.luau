@@ -14,6 +14,7 @@ local Services = {
 	"DataService",
 	"CombatService",
 	"MatchService",
+	"MovementService",
 	-- Add more as we build: EconomyService, AntiCheatService, etc.
 }
 
@@ -37,12 +38,16 @@ end
 local DataService = LoadedServices.DataService
 local CombatService = LoadedServices.CombatService
 local MatchService = LoadedServices.MatchService
+local MovementService = LoadedServices.MovementService
 
 if CombatService and CombatService.SetDependencies then
-	CombatService.SetDependencies({ Data = DataService, Match = MatchService })
+	CombatService.SetDependencies({ Data = DataService, Match = MatchService, Movement = MovementService })
 end
 if MatchService and MatchService.SetDependencies then
-	MatchService.SetDependencies({ Data = DataService, Combat = CombatService })
+	MatchService.SetDependencies({ Data = DataService, Combat = CombatService, Movement = MovementService })
+end
+if MovementService and MovementService.SetDependencies then
+	MovementService.SetDependencies({ Data = DataService, Combat = CombatService, Match = MatchService })
 end
 
 -- Global error handler

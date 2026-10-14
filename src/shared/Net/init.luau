@@ -38,6 +38,22 @@ Net.ClientToServer = Zap.defineEvent("ClientToServer", {
 		Command = Zap.string,
 		Args = Zap.array(Zap.string),
 	}),
+	MovementInput = Zap.Schema({
+		State = Zap.string,
+		MoveDirection = Zap.Vector3,
+		IsSprinting = Zap.boolean,
+		IsCrouching = Zap.boolean,
+		IsSliding = Zap.boolean,
+		SlideVelocity = Zap.Vector3,
+		Timestamp = Zap.number,
+	}),
+	WeaponEquipRequest = Zap.Schema({
+		WeaponId = Zap.string,
+		Slot = Zap.string,
+	}),
+	WeaponUnequipRequest = Zap.Schema({
+		Slot = Zap.string,
+	}),
 })
 
 Net.ServerToClient = Zap.defineEvent("ServerToClient", {
@@ -76,6 +92,13 @@ Net.ServerToClient = Zap.defineEvent("ServerToClient", {
 	Error = Zap.Schema({
 		Code = Zap.string,
 		Message = Zap.string,
+	}),
+	WeaponEquipped = Zap.Schema({
+		WeaponId = Zap.string,
+		Slot = Zap.string,
+	}),
+	WeaponUnequipped = Zap.Schema({
+		Slot = Zap.string,
 	}),
 })
 
