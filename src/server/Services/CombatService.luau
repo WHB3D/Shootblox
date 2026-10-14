@@ -390,10 +390,29 @@ end
 
 -- Apply validated damage
 function CombatService.ApplyDamage(attacker: Player, result: Types.ValidationResult)
-	-- Implementation: find target, apply damage, handle kill feed
-	-- This connects to HealthSystem / MatchService
-	-- For now, just log
-	print(string.format("[CombatService] Valid hit: %s damage=%.0f headshot=%s", attacker.Name, result.Damage, tostring(result.Headshot)))
+	-- Find target from the validation (we need to track this)
+	-- For now, we'll use a simplified approach
+	-- In a full implementation, we'd track the target from validation
+	
+	-- Send hit confirmation to attacker
+	Net.ServerFire(attacker, "HitConfirm", {
+		WeaponId = "Unknown", -- Would be passed from validation
+		Damage = result.Damage,
+		HitPosition = result.HitPosition,
+		Headshot = result.Headshot or false,
+	})
+
+	-- Send ammo update to attacker
+	local currentAmmo = attacker:GetAttribute("Ammo_Current") or 0
+	local reserveAmmo = attacker:GetAttribute("Ammo_Reserve") or 0
+	Net.ServerFire(attacker, "AmmoUpdate", {
+		Current = currentAmmo,
+		Reserve = reserveAmmo,
+	})
+
+	-- TODO: Apply damage to target, handle kill feed
+	-- This would integrate with MatchService and DataService
+	print(string.format("[CombatService] Valid hit: damage=%.0f headshot=%s", result.Damage, tostring(result.Headshot)))
 end
 
 -- Reload handling

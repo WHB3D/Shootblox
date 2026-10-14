@@ -100,6 +100,14 @@ Net.ServerToClient = Zap.defineEvent("ServerToClient", {
 	WeaponUnequipped = Zap.Schema({
 		Slot = Zap.string,
 	}),
+	AmmoUpdate = Zap.Schema({
+		Current = Zap.number,
+		Reserve = Zap.number,
+	}),
+	HealthUpdate = Zap.Schema({
+		Current = Zap.number,
+		Max = Zap.number,
+	}),
 })
 
 -- Server-side helpers
