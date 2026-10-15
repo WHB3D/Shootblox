@@ -18,16 +18,19 @@ function MovementService.SetDependencies(deps)
 end
 
 -- Track last known good state per player
-local PlayerMovementState: { [Player]: {
-	Position: Vector3,
-	Velocity: Vector3,
-	State: string,
-	LastUpdate: number,
-	Sprinting: boolean,
-	Crouching: boolean,
-	Sliding: boolean,
-	SlideVelocity: Vector3,
-} } = {}
+local PlayerMovementState: {
+	[Player]: {
+		Position: Vector3,
+		Velocity: Vector3,
+		State: string,
+		LastUpdate: number,
+		Sprinting: boolean,
+		Crouching: boolean,
+		Sliding: boolean,
+		SlideVelocity: Vector3,
+	},
+} =
+	{}
 
 -- Validation tolerances
 local TOLERANCE = {
@@ -35,19 +38,22 @@ local TOLERANCE = {
 	MaxVelocity = 30, -- studs/sec max legitimate
 	MaxSlideSpeed = 35,
 	MaxTeleportDistance = 15,
-	UpdateInterval = 1/30, -- 30Hz
+	UpdateInterval = 1 / 30, -- 30Hz
 }
 
 function MovementService.Init()
-	Net.ClientToServer.MovementInput:Connect(function(player: Player, data: {
-		State: string,
-		MoveDirection: Vector3,
-		IsSprinting: boolean,
-		IsCrouching: boolean,
-		IsSliding: boolean,
-		SlideVelocity: Vector3,
-		Timestamp: number,
-	})
+	Net.ClientToServer.MovementInput:Connect(function(
+		player: Player,
+		data: {
+			State: string,
+			MoveDirection: Vector3,
+			IsSprinting: boolean,
+			IsCrouching: boolean,
+			IsSliding: boolean,
+			SlideVelocity: Vector3,
+			Timestamp: number,
+		}
+	)
 		MovementService.ValidateInput(player, data)
 	end)
 
@@ -68,12 +74,22 @@ function MovementService.ValidateInput(player: Player, data: any)
 
 	-- Validate state enum
 	local validStates = {
-		Idle = true, Walking = true, Sprinting = true,
-		Crouching = true, CrouchWalking = true, Sliding = true,
-		Jumping = true, Falling = true, Vaulting = true,
+		Idle = true,
+		Walking = true,
+		Sprinting = true,
+		Crouching = true,
+		CrouchWalking = true,
+		Sliding = true,
+		Jumping = true,
+		Falling = true,
+		Vaulting = true,
 	}
 	if not validStates[data.State] then
-		Net.ServerFire(player, "Error", { Code = "INVALID_MOVEMENT_STATE", Message = "Invalid state: " .. tostring(data.State) })
+		Net.ServerFire(
+			player,
+			"Error",
+			{ Code = "INVALID_MOVEMENT_STATE", Message = "Invalid state: " .. tostring(data.State) }
+		)
 		return
 	end
 
@@ -113,14 +129,20 @@ end
 function MovementService.ValidatePositions(dt: number)
 	for player, state in PlayerMovementState do
 		local character = player.Character
-		if not character then continue end
+		if not character then
+			continue
+		end
 
 		local rootPart = character:FindFirstChild("HumanoidRootPart")
-		local humanoid = character:FindFirstChild("Humanoid")
-		if not rootPart or not humanoid then continue end
+		local humanoid = character:FindFirstChildOfClass("Humanoid")
+		if not rootPart or not rootPart:IsA("BasePart") or not humanoid then
+			continue
+		end
 
 		-- Skip if dead
-		if humanoid.Health <= 0 then continue end
+		if humanoid.Health <= 0 then
+			continue
+		end
 
 		local actualPos = rootPart.Position
 		local actualVel = rootPart.AssemblyLinearVelocity
@@ -142,8 +164,12 @@ function MovementService.ValidatePositions(dt: number)
 		-- Check velocity
 		local speed = actualVel.Magnitude
 		local maxAllowed = MovementConfig.Base.WalkSpeed
-		if state.Sprinting then maxAllowed = MovementConfig.Base.SprintSpeed end
-		if state.Sliding then maxAllowed = TOLERANCE.MaxSlideSpeed end
+		if state.Sprinting then
+			maxAllowed = MovementConfig.Base.SprintSpeed
+		end
+		if state.Sliding then
+			maxAllowed = TOLERANCE.MaxSlideSpeed
+		end
 
 		if speed > maxAllowed + 5 then -- 5 studs tolerance
 			MovementService.FlagSuspicious(player, "ExcessiveSpeed", {

@@ -27,7 +27,7 @@ local function createMockRequest(weaponId: string)
 		Direction = Vector3.new(0, 0, -1),
 		Timestamp = os.clock(),
 		ServerTick = workspace:GetServerTimeNow(),
-		ShotId = "test"
+		ShotId = "test",
 	}
 end
 
@@ -45,7 +45,7 @@ local Tests = {}
 Tests["Cooldown passes for first shot in tick"] = function()
 	local player = createMockPlayer("TestPlayer")
 	local request = createMockRequest("AR_Standard")
-	
+
 	local result = checkCooldown(player, request)
 	TestEZ.assert(result.Valid == true, "First shot should pass")
 	TestEZ.assert(player:GetAttribute("ShotsThisTick") == 1, "Should increment counter")
@@ -54,30 +54,30 @@ end
 Tests["Cooldown passes for multiple shots up to limit"] = function()
 	local player = createMockPlayer("TestPlayer")
 	local maxShots = CombatConfig.Tolerances.MaxShotsPerTick -- 3
-	
+
 	for i = 1, maxShots do
 		local request = createMockRequest("AR_Standard")
 		local result = checkCooldown(player, request)
 		TestEZ.assert(result.Valid == true, "Shot " .. i .. " should pass")
 	end
-	
+
 	TestEZ.assert(player:GetAttribute("ShotsThisTick") == maxShots, "Should track all shots")
 end
 
 Tests["Cooldown fails when exceeding shots per tick"] = function()
 	local player = createMockPlayer("TestPlayer")
 	local maxShots = CombatConfig.Tolerances.MaxShotsPerTick -- 3
-	
+
 	-- Fire max allowed
 	for i = 1, maxShots do
 		local request = createMockRequest("AR_Standard")
 		checkCooldown(player, request)
 	end
-	
+
 	-- One more should fail
 	local request = createMockRequest("AR_Standard")
 	local result = checkCooldown(player, request)
-	
+
 	TestEZ.assert(result.Valid == false, "Should fail on shot " .. (maxShots + 1))
 	TestEZ.assert(result.RejectReason == "ON_COOLDOWN", "Should return ON_COOLDOWN code")
 end
@@ -92,18 +92,18 @@ Tests["Cooldown works independently per player"] = function()
 	local player1 = createMockPlayer("Player1")
 	local player2 = createMockPlayer("Player2")
 	local maxShots = CombatConfig.Tolerances.MaxShotsPerTick
-	
+
 	-- Player 1 fires max
 	for i = 1, maxShots do
 		checkCooldown(player1, createMockRequest("AR_Standard"))
 	end
-	
+
 	-- Player 2 should still be able to fire
 	for i = 1, maxShots do
 		local result = checkCooldown(player2, createMockRequest("AR_Standard"))
 		TestEZ.assert(result.Valid == true, "Player 2 shot " .. i .. " should pass")
 	end
-	
+
 	-- Player 1 should be blocked
 	local result = checkCooldown(player1, createMockRequest("AR_Standard"))
 	TestEZ.assert(result.Valid == false, "Player 1 should still be blocked")

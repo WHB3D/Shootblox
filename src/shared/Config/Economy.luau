@@ -127,7 +127,13 @@ Economy.WeeklyTasks = {
 	{ Id = "headshots_30", Name = "Land 30 headshots", Type = "Headshots", Target = 30, Reward = { Keys = 250 } },
 	{ Id = "wins_15", Name = "Win 15 rounds", Type = "RoundWins", Target = 15, Reward = { Keys = 300 } },
 	{ Id = "damage_25000", Name = "Deal 25,000 damage", Type = "Damage", Target = 25000, Reward = { Keys = 350 } },
-	{ Id = "ranked_5", Name = "Play 5 ranked matches", Type = "RankedMatches", Target = 5, Reward = { Keys = 300, Glory = 100 } },
+	{
+		Id = "ranked_5",
+		Name = "Play 5 ranked matches",
+		Type = "RankedMatches",
+		Target = 5,
+		Reward = { Keys = 300, Glory = 100 },
+	},
 }
 
 -- Anti-dupe / idempotency

@@ -4,88 +4,61 @@
 	Loads all services in dependency order, initializes them.
 ]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local Net = require(ReplicatedStorage.Shared.Net)
+-- Init.server.luau is a sibling of the Services folder under ServerScriptService.Server
+local Services = script.Parent.Services
 
--- Service load order (dependency graph)
-local Services = {
-	"DataService",
-	"CombatService",
-	"MatchService",
-	"MovementService",
-	"WeaponService",
-	"HitboxHistory",
-	"RateLimiter",
-	"BotService",
-	-- Add more as we build: EconomyService, AntiCheatService, etc.
+-- Load order is the dependency graph: Data → Combat → Match → Movement → Weapon → Bot.
+-- HitboxHistory and RateLimiter are initialized by CombatService.
+local DataService = require(Services.DataService)
+local CombatService = require(Services.CombatService)
+local MatchService = require(Services.MatchService)
+local MovementService = require(Services.MovementService)
+local WeaponService = require(Services.WeaponService)
+local BotService = require(Services.BotService)
+
+type Service = { Init: () -> (), SetDependencies: ((any) -> ())? }
+
+local ordered: { { name: string, service: Service } } = {
+	{ name = "DataService", service = DataService :: any },
+	{ name = "CombatService", service = CombatService :: any },
+	{ name = "MatchService", service = MatchService :: any },
+	{ name = "MovementService", service = MovementService :: any },
+	{ name = "WeaponService", service = WeaponService :: any },
+	{ name = "BotService", service = BotService :: any },
 }
 
-local LoadedServices = {}
-
--- Initialize all services
-for _, name in Services do
-	local module = script[name]
-	if module then
-		local service = require(module)
-		LoadedServices[name] = service
-		if service.Init then
-			service.Init()
-		end
-	else
-		warn("[Server] Service not found: " .. name)
+-- Inject dependencies before anything runs
+local deps = {
+	Data = DataService,
+	Combat = CombatService,
+	Match = MatchService,
+	Movement = MovementService,
+	Weapon = WeaponService,
+	Bot = BotService,
+}
+for _, entry in ordered do
+	if entry.service.SetDependencies then
+		entry.service.SetDependencies(deps)
 	end
 end
 
--- Inject dependencies
-local DataService = LoadedServices.DataService
-local CombatService = LoadedServices.CombatService
-local MatchService = LoadedServices.MatchService
-local MovementService = LoadedServices.MovementService
-local WeaponService = LoadedServices.WeaponService
-local HitboxHistory = LoadedServices.HitboxHistory
-local RateLimiter = LoadedServices.RateLimiter
-local BotService = LoadedServices.BotService
-
-if CombatService and CombatService.SetDependencies then
-	CombatService.SetDependencies({ Data = DataService, Match = MatchService, Movement = MovementService })
+-- Initialize in order
+for _, entry in ordered do
+	local ok, err = pcall(function()
+		entry.service.Init()
+	end)
+	if not ok then
+		warn(string.format("[Server] %s.Init failed: %s", entry.name, tostring(err)))
+	end
 end
-if MatchService and MatchService.SetDependencies then
-	MatchService.SetDependencies({ Data = DataService, Combat = CombatService, Movement = MovementService })
-end
-if MovementService and MovementService.SetDependencies then
-	MovementService.SetDependencies({ Data = DataService, Combat = CombatService, Match = MatchService })
-end
-if WeaponService and WeaponService.SetDependencies then
-	WeaponService.SetDependencies({ Data = DataService, Combat = CombatService, Match = MatchService, Movement = MovementService })
-end
-if HitboxHistory and HitboxHistory.SetDependencies then
-	HitboxHistory.SetDependencies({ Data = DataService })
-end
-if RateLimiter and RateLimiter.SetDependencies then
-	RateLimiter.SetDependencies({ Data = DataService })
-end
-if BotService and BotService.SetDependencies then
-	BotService.SetDependencies({ Data = DataService, Combat = CombatService, Match = MatchService })
-end
-
--- Global error handler
-local function onError(msg, trace)
-	warn("[Server Error] " .. msg)
-	warn(trace)
-end
-
-Net.ServerToClient.Error:Connect(function(player, err)
-	-- Already handled by validation
-end)
 
 print("[Shootblox] Server ready - all services initialized")
 
--- Heartbeat monitor
+-- Frame budget monitor (Blueprint Gate 4: Heartbeat ≤ 8 ms)
 RunService.Heartbeat:Connect(function(dt)
-	-- Frame budget check
-	if dt > 0.033 then -- >33ms = <30 FPS
+	if dt > 0.033 then
 		warn(string.format("[Perf] Frame time: %.1fms", dt * 1000))
 	end
 end)

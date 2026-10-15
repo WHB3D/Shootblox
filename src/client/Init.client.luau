@@ -4,24 +4,20 @@
 	Initializes all controllers in dependency order.
 ]]
 
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local ControllersFolder = script.Parent.Controllers
 
-local MovementController = require(ReplicatedStorage.Client.Controllers.MovementController)
-local ViewmodelController = require(ReplicatedStorage.Client.Controllers.ViewmodelController)
-local GunController = require(ReplicatedStorage.Client.Controllers.GunController)
-local UIController = require(ReplicatedStorage.Client.Controllers.UIController)
+-- Every controller exposes Init(); the rest of its surface varies.
+type Controller = { Init: () -> () }
 
-local Controllers = {
-	MovementController,
-	ViewmodelController,
-	GunController,
-	UIController,
+local Controllers: { Controller } = {
+	require(ControllersFolder.MovementController) :: any,
+	require(ControllersFolder.ViewmodelController) :: any,
+	require(ControllersFolder.GunController) :: any,
+	require(ControllersFolder.UIController) :: any,
 }
 
 for _, controller in Controllers do
-	if controller.Init then
-		task.spawn(controller.Init)
-	end
+	task.spawn(controller.Init)
 end
 
 print("[Shootblox] Client ready - all controllers initialized")

@@ -13,7 +13,17 @@ local MockWorkspace = {}
 local raycastResults = {}
 
 MockWorkspace.Raycast = function(origin: Vector3, direction: Vector3, params: RaycastParams)
-	local key = origin.X .. "," .. origin.Y .. "," .. origin.Z .. "->" .. direction.X .. "," .. direction.Y .. "," .. direction.Z
+	local key = origin.X
+		.. ","
+		.. origin.Y
+		.. ","
+		.. origin.Z
+		.. "->"
+		.. direction.X
+		.. ","
+		.. direction.Y
+		.. ","
+		.. direction.Z
 	return raycastResults[key] or nil
 end
 
@@ -25,10 +35,15 @@ local function createMockPlayer(name: string)
 end
 
 local function createMockTarget(name: string)
-	return { Name = name .. "_Char", FindFirstAncestorOfClass = function(self, className)
-		if className == "Model" then return self end
-		return nil
-	end }
+	return {
+		Name = name .. "_Char",
+		FindFirstAncestorOfClass = function(self, className)
+			if className == "Model" then
+				return self
+			end
+			return nil
+		end,
+	}
 end
 
 local function createMockRequest(weaponId: string, target, hitPosition: Vector3?)
@@ -40,7 +55,7 @@ local function createMockRequest(weaponId: string, target, hitPosition: Vector3?
 		HitPosition = hitPosition,
 		Timestamp = os.clock(),
 		ServerTick = workspace:GetServerTimeNow(),
-		ShotId = "test"
+		ShotId = "test",
 	}
 end
 
@@ -83,7 +98,7 @@ Tests["LOS passes when clear shot to target"] = function()
 	local target = createMockTarget("Target")
 	local weapon = Weapons.Get("AR_Standard")
 	local request = createMockRequest("AR_Standard", target, Vector3.new(0, 5, -50))
-	
+
 	local result = checkLOS(player, request, weapon)
 	TestEZ.assert(result.Valid == true, "Should pass with clear LOS")
 end
@@ -93,16 +108,16 @@ Tests["LOS fails when hitting another player first"] = function()
 	local player = createMockPlayer("Attacker")
 	local target = createMockTarget("Target")
 	local blocker = createMockTarget("Blocker")
-	
+
 	-- Raycast hits blocker first
 	raycastResults["0,5,0->0,0,-1"] = {
 		Instance = blocker,
 		Material = Enum.Material.Plastic, -- Not glass/plastic
 	}
-	
+
 	local weapon = Weapons.Get("AR_Standard")
 	local request = createMockRequest("AR_Standard", target, Vector3.new(0, 5, -50))
-	
+
 	local result = checkLOS(player, request, weapon)
 	TestEZ.assert(result.Valid == false, "Should fail when hitting another player first")
 	TestEZ.assert(result.RejectReason == "INVALID_LOS", "Should return INVALID_LOS code")
@@ -112,15 +127,15 @@ Tests["LOS passes when hitting glass first (penetrable)"] = function()
 	resetRaycasts()
 	local player = createMockPlayer("Attacker")
 	local target = createMockTarget("Target")
-	
+
 	raycastResults["0,5,0->0,0,-1"] = {
 		Instance = createMockTarget("GlassWall"),
 		Material = Enum.Material.Glass,
 	}
-	
+
 	local weapon = Weapons.Get("AR_Standard")
 	local request = createMockRequest("AR_Standard", target, Vector3.new(0, 5, -50))
-	
+
 	local result = checkLOS(player, request, weapon)
 	TestEZ.assert(result.Valid == true, "Should pass through glass")
 end
@@ -129,15 +144,15 @@ Tests["LOS passes when hitting plastic first (penetrable)"] = function()
 	resetRaycasts()
 	local player = createMockPlayer("Attacker")
 	local target = createMockTarget("Target")
-	
+
 	raycastResults["0,5,0->0,0,-1"] = {
 		Instance = createMockTarget("PlasticWall"),
 		Material = Enum.Material.Plastic,
 	}
-	
+
 	local weapon = Weapons.Get("AR_Standard")
 	local request = createMockRequest("AR_Standard", target, Vector3.new(0, 5, -50))
-	
+
 	local result = checkLOS(player, request, weapon)
 	TestEZ.assert(result.Valid == true, "Should pass through plastic")
 end
@@ -147,7 +162,7 @@ Tests["LOS fails when no target and no hit"] = function()
 	local player = createMockPlayer("Attacker")
 	local weapon = Weapons.Get("AR_Standard")
 	local request = createMockRequest("AR_Standard", nil, nil)
-	
+
 	local result = checkLOS(player, request, weapon)
 	TestEZ.assert(result.Valid == false, "Should fail when no target and no hit")
 	TestEZ.assert(result.RejectReason == "INVALID_LOS", "Should return INVALID_LOS code")
@@ -157,15 +172,15 @@ Tests["LOS passes when raycast hits target directly"] = function()
 	resetRaycasts()
 	local player = createMockPlayer("Attacker")
 	local target = createMockTarget("Target")
-	
+
 	raycastResults["0,5,0->0,0,-1"] = {
 		Instance = target,
 		Material = Enum.Material.Plastic,
 	}
-	
+
 	local weapon = Weapons.Get("AR_Standard")
 	local request = createMockRequest("AR_Standard", target, Vector3.new(0, 5, -50))
-	
+
 	local result = checkLOS(player, request, weapon)
 	TestEZ.assert(result.Valid == true, "Should pass when raycast hits target directly")
 end
@@ -174,15 +189,15 @@ Tests["LOS fails when hitting concrete wall"] = function()
 	resetRaycasts()
 	local player = createMockPlayer("Attacker")
 	local target = createMockTarget("Target")
-	
+
 	raycastResults["0,5,0->0,0,-1"] = {
 		Instance = createMockTarget("ConcreteWall"),
 		Material = Enum.Material.Concrete,
 	}
-	
+
 	local weapon = Weapons.Get("AR_Standard")
 	local request = createMockRequest("AR_Standard", target, Vector3.new(0, 5, -50))
-	
+
 	local result = checkLOS(player, request, weapon)
 	TestEZ.assert(result.Valid == false, "Should fail when hitting concrete")
 	TestEZ.assert(result.RejectReason == "INVALID_LOS", "Should return INVALID_LOS code")

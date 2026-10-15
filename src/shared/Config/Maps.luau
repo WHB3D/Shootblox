@@ -4,7 +4,7 @@
 	Pure data: no Roblox globals.
 ]]
 
-local Types = require(script.Parent.Types)
+local Types = require(script.Parent.Parent.Types)
 
 export type MapSpec = Types.MapSpec
 

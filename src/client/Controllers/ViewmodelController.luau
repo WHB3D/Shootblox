@@ -5,8 +5,6 @@
 ]]
 
 local RunService = game:GetService("RunService")
-local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
@@ -15,11 +13,11 @@ local Net = require(ReplicatedStorage.Shared.Net)
 local ViewmodelController = {}
 
 local camera = workspace.CurrentCamera
-local player = game:GetService("Players").LocalPlayer
 
--- Viewmodel components
-local viewmodel: Model?
-local viewmodelRoot: BasePart?
+-- Viewmodel components (created in Init; nil until then)
+local viewmodel: Model
+local viewmodelRoot: BasePart
+local weaponModel: Model?
 local currentWeapon: string?
 local currentWeaponConfig: any?
 
@@ -32,7 +30,6 @@ local adsSpeed = 8 -- lerp speed
 local swayPosition = Vector3.zero
 local swayRotation = Vector3.zero
 local bobCycle = 0
-local lastMoveDirection = Vector3.zero
 
 -- Recoil
 local recoilOffset = CFrame.identity
@@ -97,9 +94,9 @@ function ViewmodelController.EquipWeapon(weaponId: string)
 
 	-- TODO: Load viewmodel model from ReplicatedStorage
 	-- For now, create a placeholder
-	local weaponModel = Instance.new("Model")
-	weaponModel.Name = "Weapon_" .. weaponId
-	weaponModel.Parent = viewmodel
+	local model = Instance.new("Model")
+	model.Name = "Weapon_" .. weaponId
+	model.Parent = viewmodel
 
 	-- Create a simple visual placeholder
 	local handle = Instance.new("Part")
@@ -111,18 +108,18 @@ function ViewmodelController.EquipWeapon(weaponId: string)
 	handle.CanCollide = false
 	handle.Massless = true
 	handle.CFrame = viewmodelRoot.CFrame * HIP_OFFSET
-	handle.Parent = weaponModel
+	handle.Parent = model
+	model.PrimaryPart = handle
 
-	-- Store reference
-	viewmodel.Weapon = weaponModel
-	viewmodel.Handle = handle
+	weaponModel = model
 
 	print("[ViewmodelController] Equipped " .. weaponId)
 end
 
 function ViewmodelController.UnequipWeapon()
-	if viewmodel and viewmodel:FindFirstChild("Weapon") then
-		viewmodel.Weapon:Destroy()
+	if weaponModel then
+		weaponModel:Destroy()
+		weaponModel = nil
 	end
 	currentWeapon = nil
 	currentWeaponConfig = nil
@@ -131,13 +128,19 @@ function ViewmodelController.UnequipWeapon()
 end
 
 function ViewmodelController.SetADS(ads: boolean)
-	if not currentWeapon then return end
+	if not currentWeapon then
+		return
+	end
 	isADS = ads
 end
 
 function ViewmodelController.Update(dt: number)
-	if not viewmodel or not viewmodelRoot or not camera then return end
-	if not currentWeapon or not currentWeaponConfig then return end
+	if not viewmodel or not viewmodelRoot or not camera then
+		return
+	end
+	if not currentWeapon or not currentWeaponConfig then
+		return
+	end
 
 	-- Update ADS progress
 	local targetProgress = isADS and 1 or 0
@@ -166,18 +169,33 @@ function ViewmodelController.Update(dt: number)
 	-- Final viewmodel CFrame
 	local finalCF = baseCFrame * offset * swayCF * bobCF * recoilCF
 
-	-- Smooth interpolation
+	-- Smooth interpolation, then carry the weapon model with the root
 	viewmodelRoot.CFrame = viewmodelRoot.CFrame:Lerp(finalCF, 1 - math.exp(-20 * dt))
+	if weaponModel then
+		weaponModel:PivotTo(viewmodelRoot.CFrame)
+	end
 
 	-- Update sway/bob
 	ViewmodelController.UpdateSway(dt)
 	ViewmodelController.UpdateRecoil(dt)
 end
 
-function ViewmodelController.UpdateSway(dt: number)
+-- Local character's Humanoid + root, or nil if not spawned
+local function getLocalRig(): (Humanoid?, BasePart?)
 	local character = game:GetService("Players").LocalPlayer.Character
-	local humanoid = character and character:FindFirstChild("Humanoid")
-	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	if not character then
+		return nil, nil
+	end
+	local humanoid = character:FindFirstChildOfClass("Humanoid")
+	local rootPart = character:FindFirstChild("HumanoidRootPart")
+	if rootPart and not rootPart:IsA("BasePart") then
+		rootPart = nil
+	end
+	return humanoid, rootPart :: BasePart?
+end
+
+function ViewmodelController.UpdateSway(dt: number)
+	local humanoid, rootPart = getLocalRig()
 
 	if not humanoid or not rootPart then
 		-- Decay sway when not moving
@@ -191,11 +209,6 @@ function ViewmodelController.UpdateSway(dt: number)
 	local isMoving = moveDir.Magnitude > 0.1
 
 	if isMoving then
-		-- Calculate sway based on movement
-		local right = camera.CFrame.RightVector
-		local up = camera.CFrame.UpVector
-		local look = camera.CFrame.LookVector
-
 		-- Horizontal sway (side to side)
 		local sideSway = math.sin(bobCycle * 2) * 0.02 * (moveSpeed / 20)
 		-- Vertical sway (up/down)
@@ -214,11 +227,11 @@ function ViewmodelController.UpdateSway(dt: number)
 end
 
 function ViewmodelController.CalculateBob(dt: number): CFrame
-	local character = game:GetService("Players").LocalPlayer.Character
-	local humanoid = character and character:FindFirstChild("Humanoid")
-	local rootPart = character and character:FindFirstChild("HumanoidRootPart")
+	local humanoid, rootPart = getLocalRig()
 
-	if not humanoid or not rootPart then return CFrame.identity end
+	if not humanoid or not rootPart then
+		return CFrame.identity
+	end
 
 	local moveDir = humanoid.MoveDirection
 	local moveSpeed = rootPart.AssemblyLinearVelocity.Magnitude
@@ -247,7 +260,9 @@ function ViewmodelController.UpdateRecoil(dt: number)
 end
 
 function ViewmodelController.ApplyRecoil(recoilPattern: { Vector2 }?)
-	if not recoilPattern or #recoilPattern == 0 then return end
+	if not recoilPattern or #recoilPattern == 0 then
+		return
+	end
 
 	-- Apply first stage of recoil pattern
 	local stage = recoilPattern[1] -- simplified: just first stage
@@ -255,10 +270,6 @@ function ViewmodelController.ApplyRecoil(recoilPattern: { Vector2 }?)
 	local yaw = stage.X * 0.3 -- side
 
 	recoilOffset = recoilOffset * CFrame.Angles(math.rad(pitch), math.rad(yaw), 0)
-end
-
-function ViewmodelController.SetADS(ads: boolean)
-	ViewmodelController.SetADS(ads)
 end
 
 return ViewmodelController

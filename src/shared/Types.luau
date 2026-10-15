@@ -96,6 +96,20 @@ export type MatchConfig = {
 	Region: string,
 }
 
+-- One running match (server-side record)
+export type ActiveMatch = {
+	Id: string,
+	Config: MatchConfig,
+	Players: { Player },
+	Teams: { [Player]: number },
+	State: MatchState,
+	Round: number,
+	Scores: { number },
+	PlayerStats: { [Player]: { Kills: number, Deaths: number, Damage: number, Headshots: number } },
+	ReserveCode: string,
+	StartTime: number,
+}
+
 export type MatchPlayer = {
 	UserId: number,
 	Team: number, -- 1 or 2 (0 for FFA)
@@ -128,6 +142,7 @@ export type ValidationResult = {
 	Damage: number?,
 	HitPosition: Vector3?,
 	HitNormal: Vector3?,
+	Headshot: boolean?,
 }
 
 -- Network remotes (Zap schema)

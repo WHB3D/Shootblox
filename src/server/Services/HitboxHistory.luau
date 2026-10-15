@@ -31,10 +31,14 @@ function HitboxHistory.Capture()
 
 	for _, player in Players:GetPlayers() do
 		local character = player.Character
-		if not character then continue end
+		if not character then
+			continue
+		end
 
 		local humanoid = character:FindFirstChildOfClass("Humanoid")
-		if not humanoid then continue end
+		if not humanoid then
+			continue
+		end
 
 		-- Determine rig type
 		local rigType = humanoid.RigType == Enum.HumanoidRigType.R6 and "R6" or "R15"
@@ -66,7 +70,9 @@ end
 -- Get the CFrame of a specific hitbox part at a given time (binary search)
 function HitboxHistory.GetPartAt(player: Player, partName: string, atTime: number): CFrame?
 	local buffer = History[player]
-	if not buffer or #buffer == 0 then return nil end
+	if not buffer or #buffer == 0 then
+		return nil
+	end
 
 	-- Binary search for closest tick
 	local left, right = 1, #buffer
@@ -106,7 +112,9 @@ end
 -- Get all hitbox CFrames at a given time
 function HitboxHistory.GetAllAt(player: Player, atTime: number): { [string]: CFrame }?
 	local buffer = History[player]
-	if not buffer or #buffer == 0 then return nil end
+	if not buffer or #buffer == 0 then
+		return nil
+	end
 
 	-- Binary search
 	local left, right = 1, #buffer

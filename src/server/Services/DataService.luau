@@ -6,7 +6,7 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local ProfileStore = require(ReplicatedStorage.Packages.ProfileStore)
+local ProfileStore = require(ReplicatedStorage.Shared.Vendor.ProfileStore)
 
 local Types = require(ReplicatedStorage.Shared.Types)
 local Economy = require(ReplicatedStorage.Shared.Config.Economy)
@@ -70,7 +70,13 @@ function DataService.Init()
 end
 
 function DataService.LoadProfile(player: Player)
-	local profile = ProfileStoreInstance:LoadProfileAsync("Player_" .. player.UserId, "ForceLoad")
+	-- ProfileStore API: StartSessionAsync with a Cancel predicate so a player
+	-- who leaves mid-load doesn't hold a session lock
+	local profile = ProfileStoreInstance:StartSessionAsync("Player_" .. player.UserId, {
+		Cancel = function()
+			return player.Parent ~= Players
+		end,
+	})
 	if not profile then
 		player:Kick("Failed to load profile. Please rejoin.")
 		return
@@ -82,24 +88,24 @@ function DataService.LoadProfile(player: Player)
 	-- Handle migration
 	DataService.MigrateProfile(profile)
 
-	profile:ListenToRelease(function()
+	profile.OnSessionEnd:Connect(function()
 		LoadedProfiles[player] = nil
 		player:Kick("Profile loaded on another server.")
 	end)
 
-	if player:IsDescendantOf(Players) then
+	if player.Parent == Players then
 		LoadedProfiles[player] = profile
-		DataService.FireProfileLoaded(player, profile.Data)
+		DataService.FireProfileLoaded(player, profile.Data :: any)
 		print(string.format("[DataService] Loaded profile for %s", player.Name))
 	else
-		profile:Release()
+		profile:EndSession()
 	end
 end
 
 function DataService.ReleaseProfile(player: Player)
 	local profile = LoadedProfiles[player]
 	if profile then
-		profile:Release()
+		profile:EndSession()
 		LoadedProfiles[player] = nil
 	end
 end
@@ -163,7 +169,9 @@ end
 
 function DataService.AddXP(player: Player, amount: number)
 	local profile = LoadedProfiles[player]
-	if not profile then return end
+	if not profile then
+		return
+	end
 
 	profile.Data.XP += amount
 	-- Level up check
@@ -177,13 +185,17 @@ end
 
 function DataService.OwnsWeapon(player: Player, weaponId: string): boolean
 	local profile = LoadedProfiles[player]
-	if not profile then return false end
+	if not profile then
+		return false
+	end
 	return table.find(profile.Data.OwnedWeapons, weaponId) ~= nil
 end
 
 function DataService.GrantWeapon(player: Player, weaponId: string)
 	local profile = LoadedProfiles[player]
-	if not profile then return false end
+	if not profile then
+		return false
+	end
 
 	if not table.find(profile.Data.OwnedWeapons, weaponId) then
 		table.insert(profile.Data.OwnedWeapons, weaponId)
@@ -194,7 +206,9 @@ end
 
 function DataService.SpendKeys(player: Player, amount: number): boolean
 	local profile = LoadedProfiles[player]
-	if not profile then return false end
+	if not profile then
+		return false
+	end
 
 	if (profile.Data.Keys or 0) >= amount then
 		profile.Data.Keys -= amount
@@ -205,7 +219,9 @@ end
 
 function DataService.GetDailyTasks(player: Player): { any }
 	local profile = LoadedProfiles[player]
-	if not profile then return {} end
+	if not profile then
+		return {}
+	end
 
 	-- Generate new tasks if needed
 	if not profile.Data.DailyTasks or #profile.Data.DailyTasks == 0 then
@@ -217,12 +233,16 @@ end
 
 function DataService.GenerateDailyTasks(player: Player)
 	local profile = LoadedProfiles[player]
-	if not profile then return end
+	if not profile then
+		return
+	end
 
 	local tasks = Economy.DailyTasks
 	local selected = {}
 	local shuffled = {}
-	for i, t in tasks do shuffled[i] = t end
+	for i, t in tasks do
+		shuffled[i] = t
+	end
 
 	-- Fisher-Yates shuffle
 	for i = #shuffled, 2, -1 do
@@ -241,14 +261,25 @@ function DataService.GenerateDailyTasks(player: Player)
 	profile.Data.DailyTasks = selected
 end
 
+-- Economy.DailyTasks is an array; look a definition up by its Id
+local function findTaskDef(taskId: string): { Id: string, Type: string, Target: number, Reward: { Keys: number } }?
+	for _, def in Economy.DailyTasks do
+		if def.Id == taskId then
+			return def
+		end
+	end
+	return nil
+end
+
 function DataService.UpdateTaskProgress(player: Player, taskType: string, amount: number)
 	local profile = LoadedProfiles[player]
-	if not profile then return end
+	if not profile then
+		return
+	end
 
 	for _, task in profile.Data.DailyTasks do
 		if not task.Claimed then
-			-- Map task types to our IDs
-			local taskDef = Economy.DailyTasks[task.Id]
+			local taskDef = findTaskDef(task.Id)
 			if taskDef and taskDef.Type == taskType then
 				task.Progress = math.min(task.Progress + amount, taskDef.Target)
 			end
@@ -258,12 +289,19 @@ end
 
 function DataService.ClaimTaskReward(player: Player, taskId: string)
 	local profile = LoadedProfiles[player]
-	if not profile then return end
+	if not profile then
+		return
+	end
 
-	for i, task in profile.Data.DailyTasks do
-		if task.Id == taskId and task.Progress >= Economy.DailyTasks[taskId].Target and not task.Claimed then
+	local taskDef = findTaskDef(taskId)
+	if not taskDef then
+		return false
+	end
+
+	for _, task in profile.Data.DailyTasks do
+		if task.Id == taskId and task.Progress >= taskDef.Target and not task.Claimed then
 			task.Claimed = true
-			DataService.AddKeys(player, Economy.DailyTasks[taskId].Reward.Keys)
+			DataService.AddKeys(player, taskDef.Reward.Keys)
 			return true
 		end
 	end
@@ -273,7 +311,9 @@ end
 -- Anti-cheat strike system
 function DataService.AddStrike(player: Player, reason: string)
 	local profile = LoadedProfiles[player]
-	if not profile then return end
+	if not profile then
+		return
+	end
 
 	profile.Data.Strikes = (profile.Data.Strikes or 0) + 1
 	profile.Data.LastStrikeDecay = os.time()

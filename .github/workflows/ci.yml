@@ -22,17 +22,20 @@ jobs:
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
           ./rokit install
 
+      - name: Install Wally packages
+        run: ~/.rokit/bin/wally install
+
       - name: Selene lint
         run: ~/.rokit/bin/selene src/
 
       - name: StyLua check
-        run: ~/.rokit/bin/stylua --check src/
+        run: ~/.rokit/bin/stylua --check src/ tests/
 
       - name: Generate Rojo sourcemap
         run: ~/.rokit/bin/rojo sourcemap -o sourcemap.json
 
       - name: luau-lsp analyze
-        run: ~/.rokit/bin/luau-lsp analyze --sourcemap sourcemap.json --definitions types/globalTypes.d.lua src/
+        run: ~/.rokit/bin/luau-lsp analyze --sourcemap sourcemap.json --definitions types/globalTypes.d.lua --ignore 'Packages/**' --ignore 'DevPackages/**' --ignore 'src/shared/Vendor/**' src/
 
   build:
     name: Build Place
@@ -49,6 +52,9 @@ jobs:
           chmod +x rokit
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
           ./rokit install
+
+      - name: Install Wally packages
+        run: ~/.rokit/bin/wally install
 
       - name: Build place
         run: ~/.rokit/bin/rojo build -o shootblox.rbxl
@@ -74,6 +80,9 @@ jobs:
           chmod +x rokit
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
           ./rokit install
+
+      - name: Install Wally packages
+        run: ~/.rokit/bin/wally install
 
       - name: Build test place
         run: ~/.rokit/bin/rojo build -o shootblox-test.rbxl --project tests.project.json

@@ -20,10 +20,10 @@ return {
 		"tests.CombatService.LOSValidation",
 		"tests.CombatService.CooldownValidation",
 	},
-	
+
 	-- Reporter options
 	reporter = "TextReporter",
-	
+
 	-- Test settings
 	settings = {
 		-- Stop on first failure for CI

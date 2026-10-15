@@ -28,7 +28,7 @@ local function createMockRequest(direction: Vector3)
 		Direction = direction,
 		Timestamp = os.clock(),
 		ServerTick = workspace:GetServerTimeNow(),
-		ShotId = "test"
+		ShotId = "test",
 	}
 end
 
@@ -60,7 +60,7 @@ Tests["Angle check passes when deviation within tolerance"] = function()
 	local player = createMockPlayer("TestPlayer", CFrame.new(0, 5, 0) * CFrame.Angles(0, 0, 0))
 	-- Request direction slightly off (2 degrees)
 	local request = createMockRequest(Vector3.new(math.rad(2), 0, -1).Unit)
-	
+
 	local result = checkAngle(player, request)
 	TestEZ.assert(result.Valid == true, "Should pass with angle < 4 degrees")
 end
@@ -69,7 +69,7 @@ Tests["Angle check fails when deviation exceeds tolerance"] = function()
 	local player = createMockPlayer("TestPlayer", CFrame.new(0, 5, 0) * CFrame.Angles(0, 0, 0))
 	-- Request direction way off (10 degrees)
 	local request = createMockRequest(Vector3.new(math.rad(10), 0, -1).Unit)
-	
+
 	local result = checkAngle(player, request)
 	TestEZ.assert(result.Valid == false, "Should fail with angle > 4 degrees")
 	TestEZ.assert(result.RejectReason == "INVALID_ANGLE", "Should return INVALID_ANGLE code")
@@ -79,7 +79,7 @@ Tests["Angle check passes at exactly tolerance boundary"] = function()
 	local player = createMockPlayer("TestPlayer", CFrame.new(0, 5, 0) * CFrame.Angles(0, 0, 0))
 	-- Exactly 4 degrees
 	local request = createMockRequest(Vector3.new(math.rad(4), 0, -1).Unit)
-	
+
 	local result = checkAngle(player, request)
 	TestEZ.assert(result.Valid == true, "Should pass at exactly 4 degrees")
 end
@@ -87,7 +87,7 @@ end
 Tests["Angle check fails when character missing"] = function()
 	local player = { Name = "TestPlayer", Character = nil }
 	local request = createMockRequest(Vector3.new(0, 0, -1))
-	
+
 	local result = checkAngle(player, request)
 	TestEZ.assert(result.Valid == false, "Should fail when character missing")
 	TestEZ.assert(result.RejectReason == "INVALID_ANGLE", "Should return INVALID_ANGLE code")
@@ -103,7 +103,7 @@ Tests["Angle check fails when head missing"] = function()
 		},
 	}
 	local request = createMockRequest(Vector3.new(0, 0, -1))
-	
+
 	local result = checkAngle(player, request)
 	TestEZ.assert(result.Valid == false, "Should fail when head missing")
 	TestEZ.assert(result.RejectReason == "INVALID_ANGLE", "Should return INVALID_ANGLE code")
@@ -113,7 +113,7 @@ Tests["Angle check handles 180 degree deviation"] = function()
 	local player = createMockPlayer("TestPlayer", CFrame.new(0, 5, 0) * CFrame.Angles(0, 0, 0))
 	-- Request direction exactly opposite (180 degrees)
 	local request = createMockRequest(Vector3.new(0, 0, 1)) -- +Z instead of -Z
-	
+
 	local result = checkAngle(player, request)
 	TestEZ.assert(result.Valid == false, "Should fail with 180 degree deviation")
 	TestEZ.assert(result.RejectReason == "INVALID_ANGLE", "Should return INVALID_ANGLE code")

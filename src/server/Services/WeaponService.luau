@@ -9,7 +9,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 local Net = require(ReplicatedStorage.Shared.Net)
-local DataService = require(ReplicatedStorage.Server.Services.DataService)
+local DataService = require(script.Parent.DataService)
 
 local WeaponService = {}
 
@@ -55,7 +55,11 @@ function WeaponService.HandleEquipRequest(player: Player, weaponId: string, slot
 
 	-- Validate slot matches weapon
 	if weapon.Slot ~= slot then
-		Net.ServerFire(player, "Error", { Code = "SLOT_MISMATCH", Message = weaponId .. " cannot go in " .. slot .. " slot" })
+		Net.ServerFire(
+			player,
+			"Error",
+			{ Code = "SLOT_MISMATCH", Message = weaponId .. " cannot go in " .. slot .. " slot" }
+		)
 		return
 	end
 
@@ -74,7 +78,9 @@ end
 
 function WeaponService.EquipWeapon(player: Player, weaponId: string, slot: string)
 	local character = player.Character
-	if not character then return end
+	if not character then
+		return
+	end
 
 	-- Create tool on server (for other clients to see)
 	local tool = Instance.new("Tool")
@@ -113,8 +119,12 @@ function WeaponService.EquipWeapon(player: Player, weaponId: string, slot: strin
 	-- Tell client to equip viewmodel
 	Net.ServerFire(player, "WeaponEquipped", { WeaponId = weaponId, Slot = slot })
 
-	-- Initialize ammo
-	DataService.Set(player, "Ammo_" .. weaponId, Weapons.Get(weaponId).MagSize)
+	-- Initialize ammo on the player attribute CombatService.CheckAmmo reads.
+	-- Ammo is match-transient and must never touch the persisted profile.
+	local weapon = Weapons.Get(weaponId)
+	if weapon then
+		player:SetAttribute("Ammo_" .. weaponId, weapon.MagSize)
+	end
 
 	print("[WeaponService] " .. player.Name .. " equipped " .. weaponId .. " in " .. slot)
 end
@@ -125,7 +135,9 @@ end
 
 function WeaponService.UnequipWeapon(player: Player, slot: string)
 	local character = player.Character
-	if not character then return end
+	if not character then
+		return
+	end
 
 	-- Find and remove tool
 	for _, tool in character:GetChildren() do
@@ -159,7 +171,9 @@ function WeaponService.HandleSwapRequest(player: Player, slot: string)
 	end
 end
 
-function WeaponService.GetLoadout(player: Player): { Primary: string?, Secondary: string?, Melee: string?, Utility: string? }
+function WeaponService.GetLoadout(
+	player: Player
+): { Primary: string?, Secondary: string?, Melee: string?, Utility: string? }
 	return PlayerLoadouts[player] or { Primary = nil, Secondary = nil, Melee = nil, Utility = nil }
 end
 

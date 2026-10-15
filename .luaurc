@@ -1,13 +1,12 @@
 {
-  "languageFeatures": {
-    "Luau": true
-  },
-  "globals": {
-    "game": "readonly",
-    "workspace": "readonly",
-    "script": "readonly"
-  },
-  "diagnostics": {
-    "unused": "warning"
-  }
+  "languageMode": "nonstrict",
+  "globals": [
+    "game", "workspace", "script", "task", "warn",
+    "Instance", "Enum", "Vector3", "CFrame", "Color3",
+    "UDim", "UDim2", "Random", "RaycastParams", "typeof",
+    "Players", "ReplicatedStorage", "ServerStorage", "RunService",
+    "UserInputService", "TweenService", "Debris", "Lighting",
+    "TextService", "HttpService", "DataStoreService"
+  ],
+  "aliases": {}
 }

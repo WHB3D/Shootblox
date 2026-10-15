@@ -6,7 +6,6 @@
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local Players = game:GetService("Players")
-local RunService = game:GetService("RunService")
 local TweenService = game:GetService("TweenService")
 
 local Net = require(ReplicatedStorage.Shared.Net)
@@ -16,17 +15,17 @@ local UIController = {}
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 
--- UI elements
-local screenGui: ScreenGui?
-local ammoFrame: Frame?
-local ammoText: TextLabel?
-local reserveText: TextLabel?
-local healthFrame: Frame?
-local healthBar: Frame?
-local healthText: TextLabel?
-local crosshairFrame: Frame?
-local killFeedFrame: Frame?
-local scoreboardFrame: Frame?
+-- UI elements — all built synchronously in CreateHUD() before any handler can run
+local screenGui: ScreenGui
+local ammoFrame: Frame
+local ammoText: TextLabel
+local reserveText: TextLabel
+local healthFrame: Frame
+local healthBar: Frame
+local healthText: TextLabel
+local crosshairFrame: Frame
+local killFeedFrame: Frame
+local scoreboardFrame: Frame
 
 -- State
 local currentAmmo = 0
@@ -311,14 +310,19 @@ function UIController.AddKillFeedEntry(killer: string, victim: string, weapon: s
 		end
 	end)
 
-	-- Limit kill feed entries
-	local children = killFeedFrame:GetChildren()
-	if #children > 10 then
-		table.sort(children, function(a, b)
+	-- Limit kill feed entries (skip the UIListLayout — it has no LayoutOrder)
+	local entries: { Frame } = {}
+	for _, child in killFeedFrame:GetChildren() do
+		if child:IsA("Frame") then
+			table.insert(entries, child)
+		end
+	end
+	if #entries > 10 then
+		table.sort(entries, function(a, b)
 			return a.LayoutOrder > b.LayoutOrder
 		end)
-		for i = 11, #children do
-			children[i]:Destroy()
+		for i = 11, #entries do
+			entries[i]:Destroy()
 		end
 	end
 end
@@ -369,7 +373,8 @@ function UIController.UpdateScoreboard(players: { any })
 		entry.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
 		entry.Parent = scoreboardFrame
 
-		local data = { p.name, p.team or "FFA", tostring(p.kills or 0), tostring(p.deaths or 0), tostring(p.score or 0) }
+		local data =
+			{ p.name, p.team or "FFA", tostring(p.kills or 0), tostring(p.deaths or 0), tostring(p.score or 0) }
 		local positions = { 0.05, 0.25, 0.5, 0.65, 0.85 }
 		for j, text in data do
 			local label = Instance.new("TextLabel")

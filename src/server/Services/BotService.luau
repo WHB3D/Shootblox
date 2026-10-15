@@ -6,14 +6,18 @@
 ]]
 
 local Players = game:GetService("Players")
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
 
-local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
-local Maps = require(ReplicatedStorage.Shared.Config.Maps)
-local Net = require(ReplicatedStorage.Shared.Net)
-
 local BotService = {}
+
+-- Typed lookup: a character's named BasePart, or nil
+local function getPart(model: Model, name: string): BasePart?
+	local part = model:FindFirstChild(name)
+	if part and part:IsA("BasePart") then
+		return part
+	end
+	return nil
+end
 
 local BotCharacters: { Model } = {}
 local BotStates: { [Model]: string } = {}
@@ -30,7 +34,7 @@ local BOT_ACQUISITION_RANGE = 80
 local BOT_FIRE_RANGE = 60
 local BOT_AIM_SPEED = 5 -- radians per second
 
-function BotService.SetDependencies(deps)
+function BotService.SetDependencies(_deps)
 	-- Store dependencies if needed
 end
 
@@ -87,7 +91,7 @@ function BotService.SpawnBot(): Model?
 	head.Parent = character
 
 	-- Simple arms/legs
-	for i, name in ipairs({"Left Arm", "Right Arm", "Left Leg", "Right Leg", "Torso"}) do
+	for i, name in ipairs({ "Left Arm", "Right Arm", "Left Leg", "Right Leg", "Torso" }) do
 		local part = Instance.new("Part")
 		part.Name = name
 		part.Size = Vector3.new(1, 2, 1)
@@ -163,8 +167,8 @@ function BotService.BotAcquireTarget(botChar: Model, dt: number)
 	end
 
 	local targetChar = target.Character
-	local targetHRP = targetChar:FindFirstChild("HumanoidRootPart")
-	local botHRP = botChar:FindFirstChild("HumanoidRootPart")
+	local targetHRP = getPart(targetChar, "HumanoidRootPart")
+	local botHRP = getPart(botChar, "HumanoidRootPart")
 
 	if not targetHRP or not botHRP then
 		BotStates[botChar] = "Idle"
@@ -181,7 +185,6 @@ function BotService.BotAcquireTarget(botChar: Model, dt: number)
 	-- Move toward target
 	local humanoid = botChar:FindFirstChildOfClass("Humanoid")
 	if humanoid then
-		local direction = (targetHRP.Position - botHRP.Position).Unit
 		humanoid:MoveTo(targetHRP.Position)
 	end
 
@@ -199,8 +202,8 @@ function BotService.BotAim(botChar: Model, dt: number)
 		return
 	end
 
-	local targetHRP = target.Character:FindFirstChild("HumanoidRootPart")
-	local botHRP = botChar:FindFirstChild("HumanoidRootPart")
+	local targetHRP = getPart(target.Character, "HumanoidRootPart")
+	local botHRP = getPart(botChar, "HumanoidRootPart")
 
 	if not targetHRP or not botHRP then
 		BotStates[botChar] = "Idle"
@@ -259,15 +262,19 @@ function BotService.BotCooldown(botChar: Model, dt: number)
 end
 
 function BotService.FindNearestEnemy(botChar: Model): Player?
-	local botHRP = botChar:FindFirstChild("HumanoidRootPart")
-	if not botHRP then return nil end
+	local botHRP = getPart(botChar, "HumanoidRootPart")
+	if not botHRP then
+		return nil
+	end
 
-	local nearest = nil
+	local nearest: Player? = nil
 	local nearestDist = math.huge
 
 	for _, player in Players:GetPlayers() do
-		if player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-			local dist = (player.Character.HumanoidRootPart.Position - botHRP.Position).Magnitude
+		local character = player.Character
+		local hrp = character and getPart(character, "HumanoidRootPart")
+		if hrp then
+			local dist = (hrp.Position - botHRP.Position).Magnitude
 			if dist < nearestDist then
 				nearestDist = dist
 				nearest = player
@@ -285,7 +292,7 @@ function BotService.SetDifficulty(difficulty: string)
 end
 
 function BotService.Cleanup()
-	for botChar in BotCharacters do
+	for _, botChar in BotCharacters do
 		if botChar.Parent then
 			botChar:Destroy()
 		end

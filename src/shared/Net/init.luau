@@ -1,114 +1,128 @@
 --!strict
 --[[
-	SHOOTBLOX — Typed Network Layer (Zap)
+	SHOOTBLOX — Typed Network Layer
 	Server validates every request; client sends intent only.
+
+	Backed by RemoteEvents today. The public surface (ClientToServer.X:Connect,
+	ServerFire, ClientFire, ClientListen, Broadcast) is Zap-shaped so the
+	swap to generated Zap code later is a drop-in (Blueprint §5.2).
 ]]
 
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local Zap = require(ReplicatedStorage.Packages.Zap)
+local RunService = game:GetService("RunService")
+
+local IS_SERVER = RunService:IsServer()
+
+-- Every event the game speaks. Shape documented in Types.luau.
+local CLIENT_TO_SERVER = {
+	"Fire",
+	"Reload",
+	"SwapWeapon",
+	"VoteMap",
+	"QueueJoin",
+	"QueueLeave",
+	"AdminCommand",
+	"MovementInput",
+	"WeaponEquipRequest",
+	"WeaponUnequipRequest",
+}
+
+local SERVER_TO_CLIENT = {
+	"State",
+	"HitConfirm",
+	"KillFeed",
+	"Scoreboard",
+	"RoundStart",
+	"RoundEnd",
+	"MatchEnd",
+	"Error",
+	"WeaponEquipped",
+	"WeaponUnequipped",
+	"AmmoUpdate",
+	"HealthUpdate",
+	"Reloaded",
+}
+
+-- Remotes live under ReplicatedStorage/Net; the server creates them once.
+local function getFolder(): Folder
+	local folder = ReplicatedStorage:FindFirstChild("Net")
+	if folder then
+		return folder :: Folder
+	end
+	if IS_SERVER then
+		local created = Instance.new("Folder")
+		created.Name = "Net"
+		created.Parent = ReplicatedStorage
+		return created
+	end
+	return ReplicatedStorage:WaitForChild("Net") :: Folder
+end
+
+local function getRemote(folder: Folder, name: string): RemoteEvent
+	local remote = folder:FindFirstChild(name)
+	if remote then
+		return remote :: RemoteEvent
+	end
+	if IS_SERVER then
+		local created = Instance.new("RemoteEvent")
+		created.Name = name
+		created.Parent = folder
+		return created
+	end
+	return folder:WaitForChild(name) :: RemoteEvent
+end
+
+local folder = getFolder()
+
+-- Wraps a RemoteEvent in the Zap-like handle each side uses.
+local function wrap(name: string)
+	local remote = getRemote(folder, name)
+	local handle = {}
+
+	-- Server: handler(player, payload). Client: handler(payload).
+	function handle.Connect(_, callback: (...any) -> ())
+		if IS_SERVER then
+			return remote.OnServerEvent:Connect(callback)
+		end
+		return remote.OnClientEvent:Connect(callback)
+	end
+
+	-- Client -> server
+	function handle.Fire(_, ...: any)
+		if IS_SERVER then
+			-- Server-side Fire(player, ...) targets one client
+			remote:FireClient(...)
+		else
+			remote:FireServer(...)
+		end
+	end
+
+	function handle.FireAll(_, ...: any)
+		remote:FireAllClients(...)
+	end
+
+	function handle.FireAllExcept(_, except: Player, ...: any)
+		for _, player in game:GetService("Players"):GetPlayers() do
+			if player ~= except then
+				remote:FireClient(player, ...)
+			end
+		end
+	end
+
+	return handle
+end
 
 local Net = {}
 
--- Define the network schema
-Net.ClientToServer = Zap.defineEvent("ClientToServer", {
-	Fire = Zap.Schema({
-		WeaponId = Zap.string,
-		Origin = Zap.Vector3,
-		Direction = Zap.Vector3,
-		Target = Zap.Instance.optional(),
-		HitPosition = Zap.Vector3.optional(),
-		HitNormal = Zap.Vector3.optional(),
-		Timestamp = Zap.number,
-		ServerTick = Zap.number,
-	}),
-	Reload = Zap.Schema({
-		WeaponId = Zap.string,
-	}),
-	SwapWeapon = Zap.Schema({
-		Slot = Zap.string,
-	}),
-	VoteMap = Zap.Schema({
-		MapId = Zap.string,
-	}),
-	QueueJoin = Zap.Schema({
-		Mode = Zap.string,
-	}),
-	QueueLeave = Zap.Schema({}),
-	AdminCommand = Zap.Schema({
-		Command = Zap.string,
-		Args = Zap.array(Zap.string),
-	}),
-	MovementInput = Zap.Schema({
-		State = Zap.string,
-		MoveDirection = Zap.Vector3,
-		IsSprinting = Zap.boolean,
-		IsCrouching = Zap.boolean,
-		IsSliding = Zap.boolean,
-		SlideVelocity = Zap.Vector3,
-		Timestamp = Zap.number,
-	}),
-	WeaponEquipRequest = Zap.Schema({
-		WeaponId = Zap.string,
-		Slot = Zap.string,
-	}),
-	WeaponUnequipRequest = Zap.Schema({
-		Slot = Zap.string,
-	}),
-})
+Net.ClientToServer = {} :: { [string]: any }
+for _, name in CLIENT_TO_SERVER do
+	Net.ClientToServer[name] = wrap(name)
+end
 
-Net.ServerToClient = Zap.defineEvent("ServerToClient", {
-	State = Zap.Schema({
-		State = Zap.string,
-		Data = Zap.any,
-	}),
-	HitConfirm = Zap.Schema({
-		WeaponId = Zap.string,
-		Damage = Zap.number,
-		HitPosition = Zap.Vector3,
-		Headshot = Zap.boolean,
-	}),
-	KillFeed = Zap.Schema({
-		Killer = Zap.string,
-		Victim = Zap.string,
-		Weapon = Zap.string,
-		Headshot = Zap.boolean,
-	}),
-	Scoreboard = Zap.Schema({
-		Players = Zap.array(Zap.any),
-	}),
-	RoundStart = Zap.Schema({
-		Round = Zap.number,
-		Map = Zap.string,
-		FreezeEnd = Zap.number,
-	}),
-	RoundEnd = Zap.Schema({
-		Winner = Zap.number.optional(),
-		Scores = Zap.array(Zap.number),
-	}),
-	MatchEnd = Zap.Schema({
-		Winner = Zap.number.optional(),
-		Stats = Zap.array(Zap.any),
-	}),
-	Error = Zap.Schema({
-		Code = Zap.string,
-		Message = Zap.string,
-	}),
-	WeaponEquipped = Zap.Schema({
-		WeaponId = Zap.string,
-		Slot = Zap.string,
-	}),
-	WeaponUnequipped = Zap.Schema({
-		Slot = Zap.string,
-	}),
-	AmmoUpdate = Zap.Schema({
-		Current = Zap.number,
-		Reserve = Zap.number,
-	}),
-	HealthUpdate = Zap.Schema({
-		Current = Zap.number,
-		Max = Zap.number,
-	}),
-})
+Net.ServerToClient = {} :: { [string]: any }
+for _, name in SERVER_TO_CLIENT do
+	Net.ServerToClient[name] = wrap(name)
+end
 
 -- Server-side helpers
 function Net.ServerFire(player: Player, event: string, ...: any)

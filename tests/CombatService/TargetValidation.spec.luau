@@ -90,15 +90,15 @@ Tests["Target check passes when hit matches rewound position"] = function()
 	-- Clear history
 	local targetPlayer = { Name = "Target" }
 	PositionHistory[targetPlayer] = {}
-	
+
 	-- Add history entry at tick 1000
 	PositionHistory[targetPlayer] = {
 		{ Tick = 1000, CFrames = { Head = CFrame.new(10, 5, 0) } },
 	}
-	
+
 	local attacker = createMockAttacker("Attacker")
 	local request = createMockRequest(targetPlayer, Vector3.new(10, 5, 0), 1000)
-	
+
 	local result = checkTarget(attacker, request)
 	TestEZ.assert(result.Valid == true, "Should pass when hit matches rewound position")
 	TestEZ.assert(result.Headshot == true, "Should detect headshot when hit near head")
@@ -109,11 +109,11 @@ Tests["Target check fails when drift exceeds tolerance"] = function()
 	PositionHistory[targetPlayer] = {
 		{ Tick = 1000, CFrames = { Head = CFrame.new(10, 5, 0) } },
 	}
-	
+
 	local attacker = createMockAttacker("Attacker")
 	-- Hit position 10 studs away from rewound head (tolerance is 6)
 	local request = createMockRequest(targetPlayer, Vector3.new(20, 5, 0), 1000)
-	
+
 	local result = checkTarget(attacker, request)
 	TestEZ.assert(result.Valid == false, "Should fail when drift > 6 studs")
 	TestEZ.assert(result.RejectReason == "INVALID_TARGET", "Should return INVALID_TARGET code")
@@ -127,11 +127,11 @@ Tests["Target check finds closest history tick"] = function()
 		{ Tick = 1000, CFrames = { Head = CFrame.new(10, 5, 0) } },
 		{ Tick = 1010, CFrames = { Head = CFrame.new(20, 5, 0) } },
 	}
-	
+
 	local attacker = createMockAttacker("Attacker")
 	-- Request at tick 1002 should match tick 1000 entry (closest)
 	local request = createMockRequest(targetPlayer, Vector3.new(10, 5, 0), 1002)
-	
+
 	local result = checkTarget(attacker, request)
 	TestEZ.assert(result.Valid == true, "Should find closest tick (1000) to request tick (1002)")
 	TestEZ.assert((result.HitPosition - Vector3.new(10, 5, 0)).Magnitude < 0.1, "Should use tick 1000 position")
@@ -140,10 +140,10 @@ end
 Tests["Target check fails when no history"] = function()
 	local targetPlayer = { Name = "Target" }
 	PositionHistory[targetPlayer] = nil
-	
+
 	local attacker = createMockAttacker("Attacker")
 	local request = createMockRequest(targetPlayer, Vector3.new(10, 5, 0), 1000)
-	
+
 	local result = checkTarget(attacker, request)
 	TestEZ.assert(result.Valid == false, "Should fail when no position history")
 	TestEZ.assert(result.RejectReason == "INVALID_TARGET", "Should return INVALID_TARGET code")
@@ -152,7 +152,7 @@ end
 Tests["Target check fails when target missing"] = function()
 	local attacker = createMockAttacker("Attacker")
 	local request = createMockRequest(nil, Vector3.new(10, 5, 0), 1000)
-	
+
 	local result = checkTarget(attacker, request)
 	TestEZ.assert(result.Valid == false, "Should fail when target is nil")
 	TestEZ.assert(result.RejectReason == "INVALID_TARGET", "Should return INVALID_TARGET code")
@@ -163,10 +163,10 @@ Tests["Target check fails when hit position missing"] = function()
 	PositionHistory[targetPlayer] = {
 		{ Tick = 1000, CFrames = { Head = CFrame.new(10, 5, 0) } },
 	}
-	
+
 	local attacker = createMockAttacker("Attacker")
 	local request = createMockRequest(targetPlayer, nil, 1000)
-	
+
 	local result = checkTarget(attacker, request)
 	TestEZ.assert(result.Valid == false, "Should fail when hit position missing")
 	TestEZ.assert(result.RejectReason == "INVALID_TARGET", "Should return INVALID_TARGET code")
@@ -177,15 +177,15 @@ Tests["Headshot detection works correctly"] = function()
 	PositionHistory[targetPlayer] = {
 		{ Tick = 1000, CFrames = { Head = CFrame.new(10, 5, 0) } },
 	}
-	
+
 	local attacker = createMockAttacker("Attacker")
 	-- Hit 2 studs from head = headshot
 	local request = createMockRequest(targetPlayer, Vector3.new(11.5, 5, 0), 1000)
-	
+
 	local result = checkTarget(attacker, request)
 	TestEZ.assert(result.Valid == true)
 	TestEZ.assert(result.Headshot == true, "Hit within 3 studs of head = headshot")
-	
+
 	-- Hit 4 studs from head = not headshot
 	local request2 = createMockRequest(targetPlayer, Vector3.new(14, 5, 0), 1000)
 	local result2 = checkTarget(attacker, request2)

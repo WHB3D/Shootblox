@@ -1,3 +1,10 @@
 std = "roblox"
-allow_defined_top = true
-ignore = ["Packages/**", "*.spec.luau"]
+
+[rules]
+unused_variable = "warn"
+undefined_variable = "deny"
+unscoped_variables = "warn"
+incorrect_standard_library_use = "allow"
+
+[config]
+exclude = ["types/**", "tests/**", "Packages/**"]

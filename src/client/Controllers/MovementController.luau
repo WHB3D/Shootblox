@@ -27,16 +27,13 @@ local moveDirection = Vector3.zero
 local isSprinting = false
 local isCrouching = false
 local isSliding = false
-local slideStartTime = 0
 local slideVelocity = Vector3.zero
-local lastCrouchTime = 0
 local lastSlideTime = 0
 local vaultCooldown = 0
 local autoSprintTimer = 0
-local touchStartPos: Vector2?
 
 -- Touch input tracking
-local activeTouches = {}
+local activeTouches: { [InputObject]: Vector3 } = {}
 
 function MovementController.Init()
 	player.CharacterAdded:Connect(MovementController.OnCharacterAdded)
@@ -52,7 +49,7 @@ function MovementController.Init()
 
 	task.spawn(function()
 		while true do
-			task.wait(1/30)
+			task.wait(1 / 30)
 			if character and humanoid then
 				MovementController.SendInputState()
 			end
@@ -64,14 +61,16 @@ end
 
 function MovementController.OnCharacterAdded(newCharacter: Model)
 	character = newCharacter
-	humanoid = newCharacter:WaitForChild("Humanoid")
-	rootPart = newCharacter:WaitForChild("HumanoidRootPart")
+	local newHumanoid = newCharacter:WaitForChild("Humanoid") :: Humanoid
+	local newRoot = newCharacter:WaitForChild("HumanoidRootPart") :: BasePart
+	humanoid = newHumanoid
+	rootPart = newRoot
 
-	humanoid.WalkSpeed = MovementConfig.Base.WalkSpeed
-	humanoid.JumpPower = MovementConfig.Base.JumpPower
-	humanoid.AutoRotate = true
+	newHumanoid.WalkSpeed = MovementConfig.Base.WalkSpeed
+	newHumanoid.JumpPower = MovementConfig.Base.JumpPower
+	newHumanoid.AutoRotate = true
 
-	humanoid.StateChanged:Connect(function(_, newState)
+	newHumanoid.StateChanged:Connect(function(_, newState)
 		MovementController.OnStateChanged(newState)
 	end)
 
@@ -116,16 +115,22 @@ function MovementController.BindInputs()
 end
 
 function MovementController.BindTouchInputs()
+	-- Track each finger's start position independently so multi-touch
+	-- (joystick + swipe) doesn't corrupt the swipe delta.
 	UserInputService.TouchStarted:Connect(function(touch, processed)
-		if processed then return end
-		activeTouches[touch] = tick()
-		touchStartPos = touch.Position
+		if processed then
+			return
+		end
+		activeTouches[touch] = touch.Position
 	end)
 
 	UserInputService.TouchMoved:Connect(function(touch, processed)
-		if processed then return end
-		if activeTouches[touch] then
-			local delta = touch.Position - (touchStartPos or touch.Position)
+		if processed then
+			return
+		end
+		local startPos = activeTouches[touch]
+		if startPos then
+			local delta = touch.Position - startPos
 			if delta.Magnitude > MovementConfig.MobileAssist.SwipeThreshold then
 				MovementController.HandleSwipe(delta)
 				activeTouches[touch] = nil
@@ -138,7 +143,7 @@ function MovementController.BindTouchInputs()
 	end)
 end
 
-function MovementController.HandleSwipe(delta: Vector2)
+function MovementController.HandleSwipe(delta: Vector3)
 	if delta.Y < -MovementConfig.MobileAssist.SwipeThreshold then
 		MovementController.TryJump()
 	elseif delta.Y > MovementConfig.MobileAssist.SwipeThreshold then
@@ -151,7 +156,9 @@ function MovementController.HandleSwipe(delta: Vector2)
 end
 
 function MovementController.UpdateMovementInput()
-	if not humanoid or not rootPart then return end
+	if not humanoid or not rootPart then
+		return
+	end
 
 	local moveDir = humanoid.MoveDirection
 	if moveDir.Magnitude > 0 then
@@ -162,7 +169,7 @@ function MovementController.UpdateMovementInput()
 
 	if MovementConfig.MobileAssist.AutoSprint and UserInputService.TouchEnabled then
 		if moveDirection.Magnitude > 0 then
-			autoSprintTimer += 1/60
+			autoSprintTimer += 1 / 60
 			if autoSprintTimer > 0.5 and not isSprinting then
 				MovementController.SetSprinting(true)
 			end
@@ -184,13 +191,17 @@ function MovementController.UpdateMovementInput()
 end
 
 function MovementController.SetSprinting(sprinting: boolean)
-	if not humanoid then return end
+	if not humanoid then
+		return
+	end
 	isSprinting = sprinting
 	humanoid.WalkSpeed = sprinting and MovementConfig.Base.SprintSpeed or MovementConfig.Base.WalkSpeed
 end
 
 function MovementController.SetCrouching(crouching: boolean)
-	if not humanoid or not rootPart then return end
+	if not humanoid or not rootPart then
+		return
+	end
 	isCrouching = crouching
 
 	if crouching then
@@ -198,13 +209,18 @@ function MovementController.SetCrouching(crouching: boolean)
 	else
 		humanoid.WalkSpeed = isSprinting and MovementConfig.Base.SprintSpeed or MovementConfig.Base.WalkSpeed
 	end
-	lastCrouchTime = tick()
 end
 
 function MovementController.TryJump()
-	if not humanoid or not rootPart then return end
-	if humanoid:GetState() == Enum.HumanoidStateType.Jumping then return end
-	if humanoid:GetState() == Enum.HumanoidStateType.Freefall then return end
+	if not humanoid or not rootPart then
+		return
+	end
+	if humanoid:GetState() == Enum.HumanoidStateType.Jumping then
+		return
+	end
+	if humanoid:GetState() == Enum.HumanoidStateType.Freefall then
+		return
+	end
 
 	if MovementController.CheckVault() then
 		return
@@ -214,16 +230,25 @@ function MovementController.TryJump()
 end
 
 function MovementController.TrySlide()
-	if not humanoid or not rootPart then return end
-	if isSliding then return end
-	if not isSprinting then return end
-	if tick() - lastSlideTime < MovementConfig.Slide.Cooldown then return end
+	if not humanoid or not rootPart then
+		return
+	end
+	if isSliding then
+		return
+	end
+	if not isSprinting then
+		return
+	end
+	if tick() - lastSlideTime < MovementConfig.Slide.Cooldown then
+		return
+	end
 
-	if moveDirection.Magnitude < 0.1 then return end
+	if moveDirection.Magnitude < 0.1 then
+		return
+	end
 
 	isSliding = true
 	lastSlideTime = tick()
-	slideStartTime = tick()
 
 	slideVelocity = moveDirection * MovementConfig.Slide.Speed
 	if isCrouching then
@@ -248,36 +273,53 @@ function MovementController.EndSlide()
 end
 
 function MovementController.CheckVault(): boolean
-	if not humanoid or not rootPart then return false end
-	if tick() - vaultCooldown < MovementConfig.Vault.Cooldown then return false end
-	if moveDirection.Magnitude < MovementConfig.Vault.MinApproachSpeed then return false end
+	if not humanoid or not rootPart then
+		return false
+	end
+	if tick() - vaultCooldown < MovementConfig.Vault.Cooldown then
+		return false
+	end
+	if moveDirection.Magnitude < MovementConfig.Vault.MinApproachSpeed then
+		return false
+	end
 
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { character }
 
 	local result = workspace:Raycast(rootPart.Position, moveDirection * MovementConfig.Vault.MaxDistance, params)
-	if not result then return false end
+	if not result then
+		return false
+	end
 
 	local height = result.Position.Y - rootPart.Position.Y
-	if height > MovementConfig.Vault.MaxHeight then return false end
-	if height < 1 then return false end
+	if height > MovementConfig.Vault.MaxHeight then
+		return false
+	end
+	if height < 1 then
+		return false
+	end
 
 	vaultCooldown = tick()
 	MovementController.DoVault(result)
 	return true
 end
 
-function MovementController.DoVault(result: RaycastResult)
+function MovementController.DoVault(_result: RaycastResult)
+	local hum, root = humanoid, rootPart
+	if not hum or not root then
+		return
+	end
+
 	MovementController.PlayAnimation("Vault")
 
-	humanoid.WalkSpeed = 0
-	humanoid.JumpPower = 0
+	hum.WalkSpeed = 0
+	hum.JumpPower = 0
 
 	local bodyVelocity = Instance.new("BodyVelocity")
 	bodyVelocity.MaxForce = Vector3.new(4000, 4000, 4000)
 	bodyVelocity.Velocity = moveDirection * 20 + Vector3.new(0, 30, 0)
-	bodyVelocity.Parent = rootPart
+	bodyVelocity.Parent = root
 
 	game:GetService("Debris"):AddItem(bodyVelocity, MovementConfig.Vault.Duration)
 
@@ -302,10 +344,11 @@ function MovementController.OnStateChanged(newState: Enum.HumanoidStateType)
 end
 
 function MovementController.UpdateState()
-	if isSliding then
+	local root = rootPart
+	if isSliding and root then
 		currentState = "Sliding"
 		slideVelocity *= MovementConfig.Slide.MomentumPreservation
-		rootPart.AssemblyLinearVelocity = Vector3.new(slideVelocity.X, rootPart.AssemblyLinearVelocity.Y, slideVelocity.Z)
+		root.AssemblyLinearVelocity = Vector3.new(slideVelocity.X, root.AssemblyLinearVelocity.Y, slideVelocity.Z)
 
 		if slideVelocity.Magnitude < 5 then
 			MovementController.EndSlide()
@@ -337,8 +380,6 @@ function MovementController.SendInputState()
 	})
 end
 
-function MovementController.PlayAnimation(name: string)
-
-end
+function MovementController.PlayAnimation(name: string) end
 
 return MovementController

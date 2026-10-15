@@ -4,10 +4,9 @@
 	Duel matchmaking, queue, reserved servers, round state machine.
 ]]
 
-local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local TeleportService = game:GetService("TeleportService")
-local RunService = game:GetService("RunService")
+local HttpService = game:GetService("HttpService")
 
 local Types = require(ReplicatedStorage.Shared.Types)
 local Maps = require(ReplicatedStorage.Shared.Config.Maps)
@@ -21,7 +20,7 @@ function MatchService.SetDependencies(deps)
 end
 
 -- Active matches and queues
-local ActiveMatches: { [string]: Types.MatchState } = {}
+local ActiveMatches: { [string]: Types.ActiveMatch } = {}
 local Queues: { [string]: { Player } } = {
 	["1v1"] = {},
 	["2v2"] = {},
@@ -77,13 +76,19 @@ function MatchService.GetPlayerMatchConfig(player: Player): Types.MatchConfig
 end
 
 function MatchService.JoinQueue(player: Player, mode: string)
-	if PlayerMatch[player] then return end -- already in match
-	if not Queues[mode] then return end
+	if PlayerMatch[player] then
+		return
+	end -- already in match
+	if not Queues[mode] then
+		return
+	end
 
 	-- Leave any other queue
 	for _, queue in Queues do
 		local idx = table.find(queue, player)
-		if idx then table.remove(queue, idx) end
+		if idx then
+			table.remove(queue, idx)
+		end
 	end
 
 	table.insert(Queues[mode], player)
@@ -108,15 +113,18 @@ function MatchService.MatchmakerLoop()
 		task.wait(1)
 		for mode, queue in Queues do
 			local config = table.clone(DEFAULT_CONFIG)
-			config.Mode = mode
+			config.Mode = mode :: any
 			config.MapId = MatchService.PickMap(mode)
 
 			local required = mode == "FFA" and 2 or (mode == "1v1" and 2 or mode == "2v2" and 4 or 10)
 			if #queue >= required then
 				-- Form match
-				local players = {}
-				for i = 1, required do
-					table.insert(players, table.remove(queue, 1))
+				local players: { Player } = {}
+				for _ = 1, required do
+					local next = table.remove(queue, 1)
+					if next then
+						table.insert(players, next)
+					end
 				end
 				MatchService.CreateMatch(players, config)
 			end
@@ -126,17 +134,21 @@ end
 
 function MatchService.PickMap(mode: string): string
 	local eligible = Maps.GetByMode(mode)
-	if #eligible == 0 then return "Foundry" end
+	if #eligible == 0 then
+		return "Foundry"
+	end
 	return eligible[math.random(1, #eligible)].Id
 end
 
 function MatchService.CreateMatch(players: { Player }, config: Types.MatchConfig)
-	local matchId = string.format("match_%d_%s", os.time(), game:GetService("HttpService"):GenerateGUID(false):sub(1, 8))
+	local matchId = string.format("match_%d_%s", os.time(), HttpService:GenerateGUID(false):sub(1, 8))
 
 	-- Assign teams
-	local teamAssignments = {}
+	local teamAssignments: { [Player]: number } = {}
 	if config.Mode == "FFA" then
-		for _, p in players do teamAssignments[p] = 0 end
+		for _, p in players do
+			teamAssignments[p] = 0
+		end
 	elseif config.Mode == "1v1" then
 		teamAssignments[players[1]] = 1
 		teamAssignments[players[2]] = 2
@@ -155,7 +167,7 @@ function MatchService.CreateMatch(players: { Player }, config: Types.MatchConfig
 	local reserveCode = TeleportService:ReserveServer(game.PlaceId)
 
 	-- Build match state
-	local matchState: Types.MatchState = {
+	local matchState: Types.ActiveMatch = {
 		Id = matchId,
 		Config = config,
 		Players = players,
@@ -188,21 +200,27 @@ function MatchService.CreateMatch(players: { Player }, config: Types.MatchConfig
 	}
 
 	for _, p in players do
-		Net.ServerFire(p, "State", { State = "Countdown", Data = { MatchId = matchId, Config = config, Team = teamAssignments[p] } })
+		Net.ServerFire(
+			p,
+			"State",
+			{ State = "Countdown", Data = { MatchId = matchId, Config = config, Team = teamAssignments[p] } }
+		)
 		TeleportService:TeleportToPrivateServer(game.PlaceId, reserveCode, { p }, teleportData)
 	end
 
 	print(string.format("[MatchService] Created %s (%s) with %d players", matchId, config.Mode, #players))
 end
 
-function MatchService.GetMatch(player: Player): Types.MatchState?
+function MatchService.GetMatch(player: Player): Types.ActiveMatch?
 	local matchId = PlayerMatch[player]
 	return matchId and ActiveMatches[matchId] or nil
 end
 
 function MatchService.EndMatch(matchId: string)
 	local match = ActiveMatches[matchId]
-	if not match then return end
+	if not match then
+		return
+	end
 
 	for _, p in match.Players do
 		PlayerMatch[p] = nil

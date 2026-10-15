@@ -11,11 +11,10 @@ local ContextActionService = game:GetService("ContextActionService")
 
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 local Net = require(ReplicatedStorage.Shared.Net)
-local ViewmodelController = require(ReplicatedStorage.Client.Controllers.ViewmodelController)
+local ViewmodelController = require(script.Parent.ViewmodelController)
 
 local GunController = {}
 
-local player = game:GetService("Players").LocalPlayer
 local currentWeapon: string?
 local currentWeaponConfig: any?
 local currentSlot: string?
@@ -66,13 +65,14 @@ function GunController.Init()
 		end
 	end, false, Enum.KeyCode.R, Enum.KeyCode.ButtonX)
 
-	-- Weapon swap (1-4 keys)
-	for i = 1, 4 do
+	-- Weapon swap (1-4 keys; gamepad cycles via R1/L1)
+	local slotKeys = { Enum.KeyCode.One, Enum.KeyCode.Two, Enum.KeyCode.Three, Enum.KeyCode.Four }
+	for i, key in slotKeys do
 		ContextActionService:BindAction("WeaponSlot" .. i, function(_, state)
 			if state == Enum.UserInputState.Begin then
 				GunController.RequestWeaponSwap(i)
 			end
-		end, false, Enum.KeyCode["One" + (i - 1)], Enum.KeyCode["ButtonR1"])
+		end, false, key)
 	end
 
 	-- ADS handled by ViewmodelController (RightShift / MouseButton2)
@@ -128,8 +128,12 @@ function GunController.RequestWeaponSwap(slotIndex: number)
 end
 
 function GunController.StartFiring()
-	if not currentWeapon or not currentWeaponConfig then return end
-	if isReloading then return end
+	if not currentWeapon or not currentWeaponConfig then
+		return
+	end
+	if isReloading then
+		return
+	end
 	if currentAmmo <= 0 then
 		GunController.HandleEmptyMag()
 		return
@@ -143,13 +147,17 @@ function GunController.StopFiring()
 end
 
 function GunController.UpdateFiring(dt: number)
-	if not currentWeapon or not currentWeaponConfig then return end
+	if not currentWeapon or not currentWeaponConfig then
+		return
+	end
 
 	-- Check if we should continue firing (auto weapons)
-	local isFiring = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1) 
+	local isFiring = UserInputService:IsMouseButtonPressed(Enum.UserInputType.MouseButton1)
 		or UserInputService:IsKeyDown(Enum.KeyCode.ButtonR2)
 
-	if not isFiring then return end
+	if not isFiring then
+		return
+	end
 
 	local now = os.clock()
 	local fireInterval = 1 / currentWeaponConfig.FireRate
@@ -160,8 +168,12 @@ function GunController.UpdateFiring(dt: number)
 end
 
 function GunController.FireOnce()
-	if not currentWeapon or not currentWeaponConfig then return end
-	if isReloading then return end
+	if not currentWeapon or not currentWeaponConfig then
+		return
+	end
+	if isReloading then
+		return
+	end
 	if currentAmmo <= 0 then
 		GunController.HandleEmptyMag()
 		return
@@ -179,7 +191,9 @@ function GunController.FireOnce()
 
 	-- Send fire request to server
 	local character = game:GetService("Players").LocalPlayer.Character
-	if not character then return end
+	if not character then
+		return
+	end
 
 	local camera = workspace.CurrentCamera
 	local origin = camera.CFrame.Position
@@ -198,10 +212,18 @@ function GunController.FireOnce()
 end
 
 function GunController.Reload()
-	if not currentWeapon or not currentWeaponConfig then return end
-	if isReloading then return end
-	if currentAmmo >= currentWeaponConfig.MagSize then return end
-	if reserveAmmo <= 0 then return end
+	if not currentWeapon or not currentWeaponConfig then
+		return
+	end
+	if isReloading then
+		return
+	end
+	if currentAmmo >= currentWeaponConfig.MagSize then
+		return
+	end
+	if reserveAmmo <= 0 then
+		return
+	end
 
 	isReloading = true
 
@@ -214,7 +236,7 @@ end
 function GunController.HandleEmptyMag()
 	-- Play empty sound
 	-- TODO: Play sound from currentWeaponConfig.Sounds.Empty
-	
+
 	-- Auto-reload if possible
 	if reserveAmmo > 0 and not isReloading then
 		task.wait(0.1)

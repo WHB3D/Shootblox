@@ -42,3 +42,8 @@ coverage/
 
 # Test output
 test-results/
+# local tool cache
+.tools/
+
+# wally dev-dependencies (also fetched, not authored)
+/DevPackages/
