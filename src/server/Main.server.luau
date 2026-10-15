@@ -6,7 +6,7 @@
 
 local RunService = game:GetService("RunService")
 
--- Init.server.luau is a sibling of the Services folder under ServerScriptService.Server
+-- Main.server.luau is a sibling of the Services folder under ServerScriptService.Server
 local Services = script.Parent.Services
 
 -- Load order is the dependency graph: Data → Combat → Match → Movement → Weapon → Bot.
@@ -17,10 +17,12 @@ local MatchService = require(Services.MatchService)
 local MovementService = require(Services.MovementService)
 local WeaponService = require(Services.WeaponService)
 local BotService = require(Services.BotService)
+local WorldService = require(Services.WorldService)
 
 type Service = { Init: () -> (), SetDependencies: ((any) -> ())? }
 
 local ordered: { { name: string, service: Service } } = {
+	{ name = "WorldService", service = WorldService :: any }, -- world first: floor must exist before anyone spawns
 	{ name = "DataService", service = DataService :: any },
 	{ name = "CombatService", service = CombatService :: any },
 	{ name = "MatchService", service = MatchService :: any },
@@ -37,6 +39,7 @@ local deps = {
 	Movement = MovementService,
 	Weapon = WeaponService,
 	Bot = BotService,
+	World = WorldService,
 }
 for _, entry in ordered do
 	if entry.service.SetDependencies then
@@ -55,6 +58,11 @@ for _, entry in ordered do
 end
 
 print("[Shootblox] Server ready - all services initialized")
+
+-- Automated Play-mode self-test: only in the selftest.project.json build
+if RunService:IsStudio() and game:GetService("ReplicatedStorage"):FindFirstChild("SBSelfTest") then
+	task.spawn(require(script.Parent.SelfTest).run)
+end
 
 -- Frame budget monitor (Blueprint Gate 4: Heartbeat ≤ 8 ms)
 RunService.Heartbeat:Connect(function(dt)

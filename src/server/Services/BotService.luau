@@ -46,9 +46,12 @@ function BotService.Init()
 		BotService.UpdateBots(dt)
 	end)
 
-	-- Auto-spawn solo bot when testing
-	task.wait(2)
-	BotService.MaybeSpawnSoloBot()
+	-- Auto-spawn solo bot when testing — in its own thread: Init must never
+	-- yield, or every service after this one boots late
+	task.spawn(function()
+		task.wait(2)
+		BotService.MaybeSpawnSoloBot()
+	end)
 end
 
 function BotService.MaybeSpawnSoloBot()

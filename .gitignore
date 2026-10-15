@@ -47,3 +47,4 @@ test-results/
 
 # wally dev-dependencies (also fetched, not authored)
 /DevPackages/
+shootblox-selftest.rbxl

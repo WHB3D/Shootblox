@@ -1,7 +1,10 @@
 --!strict
 --[[
 	SHOOTBLOX — Weapon Service (Server)
-	Handles weapon equip/unequip/swap, ammo management, inventory.
+	Two distinct operations:
+	  • Grant  — put a weapon Tool in the player's Backpack for a slot (silent)
+	  • Equip  — hold the Tool for a slot and tell the client (WeaponEquipped)
+	Only one slot is ever held; the client's viewmodel follows WeaponEquipped.
 ]]
 
 local Players = game:GetService("Players")
@@ -13,29 +16,33 @@ local DataService = require(script.Parent.DataService)
 
 local WeaponService = {}
 
--- Track equipped weapons per player
-local PlayerLoadouts: { [Player]: {
-	Primary: string?,
-	Secondary: string?,
-	Melee: string?,
-	Utility: string?,
-} } = {}
+local VALID_SLOTS = { Primary = true, Secondary = true, Melee = true, Utility = true }
 
-function WeaponService.SetDependencies(deps)
-	-- Store dependencies if needed
+-- slot -> weaponId per player, and which slot is currently held
+local PlayerLoadouts: { [Player]: { [string]: string } } = {}
+local ActiveSlot: { [Player]: string } = {}
+
+function WeaponService.SetDependencies(_deps)
+	-- DataService is required directly (ownership checks)
 end
 
 function WeaponService.Init()
 	Net.ClientToServer.WeaponEquipRequest:Connect(function(player: Player, data: { WeaponId: string, Slot: string })
-		WeaponService.HandleEquipRequest(player, data.WeaponId, data.Slot)
+		if typeof(data) == "table" and typeof(data.WeaponId) == "string" and typeof(data.Slot) == "string" then
+			WeaponService.HandleEquipRequest(player, data.WeaponId, data.Slot)
+		end
 	end)
 
 	Net.ClientToServer.WeaponUnequipRequest:Connect(function(player: Player, data: { Slot: string })
-		WeaponService.HandleUnequipRequest(player, data.Slot)
+		if typeof(data) == "table" and typeof(data.Slot) == "string" then
+			WeaponService.RemoveWeapon(player, data.Slot)
+		end
 	end)
 
 	Net.ClientToServer.SwapWeapon:Connect(function(player: Player, data: { Slot: string })
-		WeaponService.HandleSwapRequest(player, data.Slot)
+		if typeof(data) == "table" and typeof(data.Slot) == "string" then
+			WeaponService.EquipSlot(player, data.Slot)
+		end
 	end)
 
 	Players.PlayerRemoving:Connect(function(player)
@@ -45,48 +52,41 @@ function WeaponService.Init()
 	print("[WeaponService] Initialized")
 end
 
-function WeaponService.HandleEquipRequest(player: Player, weaponId: string, slot: string)
-	-- Validate weapon exists
-	local weapon = Weapons.Get(weaponId)
-	if not weapon then
-		Net.ServerFire(player, "Error", { Code = "INVALID_WEAPON", Message = "Unknown weapon: " .. weaponId })
-		return
+local function findTool(player: Player, slot: string): Tool?
+	local containers: { Instance? } = { player.Character, player:FindFirstChildOfClass("Backpack") }
+	for _, container in containers do
+		if container then
+			for _, child in container:GetChildren() do
+				if child:IsA("Tool") and child:GetAttribute("Slot") == slot then
+					return child
+				end
+			end
+		end
 	end
-
-	-- Validate slot matches weapon
-	if weapon.Slot ~= slot then
-		Net.ServerFire(
-			player,
-			"Error",
-			{ Code = "SLOT_MISMATCH", Message = weaponId .. " cannot go in " .. slot .. " slot" }
-		)
-		return
-	end
-
-	-- Check if player owns weapon
-	if not DataService.OwnsWeapon(player, weaponId) then
-		Net.ServerFire(player, "Error", { Code = "NOT_OWNED", Message = "You don't own " .. weaponId })
-		return
-	end
-
-	-- Unequip current weapon in that slot
-	WeaponService.UnequipWeapon(player, slot)
-
-	-- Equip new weapon
-	WeaponService.EquipWeapon(player, weaponId, slot)
+	return nil
 end
 
-function WeaponService.EquipWeapon(player: Player, weaponId: string, slot: string)
-	local character = player.Character
-	if not character then
+-- Grant: build the Tool and put it in the Backpack. No client event.
+function WeaponService.GrantWeapon(player: Player, weaponId: string, slot: string)
+	local weapon = Weapons.Get(weaponId)
+	local backpack = player:FindFirstChildOfClass("Backpack")
+	if not weapon or not backpack or not VALID_SLOTS[slot] then
 		return
 	end
 
-	-- Create tool on server (for other clients to see)
+	-- Replace whatever was in that slot
+	local existing = findTool(player, slot)
+	if existing then
+		existing:Destroy()
+	end
+
+	-- Server-side Tool: Roblox welds Handle to the hand itself (RequiresHandle),
+	-- so other clients see the gun. The local player sees the viewmodel instead.
 	local tool = Instance.new("Tool")
 	tool.Name = weaponId
 	tool.RequiresHandle = true
 	tool.CanBeDropped = false
+	tool.ManualActivationOnly = true -- GunController owns input, not Tool.Activated
 	tool:SetAttribute("WeaponId", weaponId)
 	tool:SetAttribute("Slot", slot)
 
@@ -95,94 +95,98 @@ function WeaponService.EquipWeapon(player: Player, weaponId: string, slot: strin
 	handle.Size = Vector3.new(0.3, 0.3, 2)
 	handle.Color = Color3.fromRGB(60, 60, 60)
 	handle.Material = Enum.Material.Metal
-	handle.Anchored = false
 	handle.CanCollide = false
+	handle.CanQuery = false -- never eat the owner's own raycasts
 	handle.Massless = true
 	handle.Parent = tool
 
-	-- Weld to character (server-side visual)
-	-- For first-person, client handles viewmodel; this is for other clients
-	local weld = Instance.new("WeldConstraint")
-	weld.Part0 = character:FindFirstChild("RightHand") or character:FindFirstChild("Right Arm")
-	weld.Part1 = handle
-	weld.Parent = handle
+	tool.Parent = backpack
 
-	tool.Parent = player.Backpack
-	tool.Parent = character -- Equip immediately
-
-	-- Update loadout
-	if not PlayerLoadouts[player] then
-		PlayerLoadouts[player] = { Primary = nil, Secondary = nil, Melee = nil, Utility = nil }
+	local loadout = PlayerLoadouts[player]
+	if not loadout then
+		loadout = {}
+		PlayerLoadouts[player] = loadout
 	end
-	PlayerLoadouts[player][slot] = weaponId
+	loadout[slot] = weaponId
 
-	-- Tell client to equip viewmodel
-	Net.ServerFire(player, "WeaponEquipped", { WeaponId = weaponId, Slot = slot })
+	-- Ammo lives on the attribute CombatService.CheckAmmo reads.
+	-- Match-transient: never touches the persisted profile.
+	player:SetAttribute("Ammo_" .. weaponId, weapon.MagSize)
 
-	-- Initialize ammo on the player attribute CombatService.CheckAmmo reads.
-	-- Ammo is match-transient and must never touch the persisted profile.
-	local weapon = Weapons.Get(weaponId)
-	if weapon then
-		player:SetAttribute("Ammo_" .. weaponId, weapon.MagSize)
-	end
-
-	print("[WeaponService] " .. player.Name .. " equipped " .. weaponId .. " in " .. slot)
+	print("[WeaponService] " .. player.Name .. " granted " .. weaponId .. " in " .. slot)
 end
 
-function WeaponService.HandleUnequipRequest(player: Player, slot: string)
-	WeaponService.UnequipWeapon(player, slot)
-end
-
-function WeaponService.UnequipWeapon(player: Player, slot: string)
+-- Equip: hold the slot's Tool and tell the client which weapon is active.
+function WeaponService.EquipSlot(player: Player, slot: string)
+	if not VALID_SLOTS[slot] then
+		return
+	end
 	local character = player.Character
-	if not character then
+	local humanoid = character and character:FindFirstChildOfClass("Humanoid")
+	local tool = findTool(player, slot)
+	local weaponId = PlayerLoadouts[player] and PlayerLoadouts[player][slot]
+	if not humanoid or not tool or not weaponId then
 		return
 	end
 
-	-- Find and remove tool
-	for _, tool in character:GetChildren() do
-		if tool:IsA("Tool") and tool:GetAttribute("Slot") == slot then
-			tool:Destroy()
-			break
-		end
+	humanoid:EquipTool(tool) -- unequips whatever was held
+	ActiveSlot[player] = slot
+	Net.ServerFire(player, "WeaponEquipped", { WeaponId = weaponId, Slot = slot })
+	print("[WeaponService] " .. player.Name .. " equipped " .. weaponId .. " (" .. slot .. ")")
+end
+
+-- Client request: change which weapon occupies a slot (loadout change)
+function WeaponService.HandleEquipRequest(player: Player, weaponId: string, slot: string)
+	local weapon = Weapons.Get(weaponId)
+	if not weapon then
+		Net.ServerFire(player, "Error", { Code = "INVALID_WEAPON", Message = "Unknown weapon: " .. weaponId })
+		return
+	end
+	if weapon.Slot ~= slot then
+		Net.ServerFire(
+			player,
+			"Error",
+			{ Code = "SLOT_MISMATCH", Message = weaponId .. " cannot go in " .. slot .. " slot" }
+		)
+		return
+	end
+	if not DataService.OwnsWeapon(player, weaponId) then
+		Net.ServerFire(player, "Error", { Code = "NOT_OWNED", Message = "You don't own " .. weaponId })
+		return
 	end
 
-	for _, tool in player.Backpack:GetChildren() do
-		if tool:IsA("Tool") and tool:GetAttribute("Slot") == slot then
-			tool:Destroy()
-			break
-		end
+	local wasActive = ActiveSlot[player] == slot
+	WeaponService.GrantWeapon(player, weaponId, slot)
+	if wasActive then
+		WeaponService.EquipSlot(player, slot)
 	end
+end
 
+function WeaponService.RemoveWeapon(player: Player, slot: string)
+	local tool = findTool(player, slot)
+	if tool then
+		tool:Destroy()
+	end
 	if PlayerLoadouts[player] then
 		PlayerLoadouts[player][slot] = nil
 	end
-
-	Net.ServerFire(player, "WeaponUnequipped", { Slot = slot })
-end
-
-function WeaponService.HandleSwapRequest(player: Player, slot: string)
-	-- Swap to a different weapon in the same slot (from inventory)
-	-- For now, just equip the default weapon for that slot
-	local defaultLoadout = Weapons.DefaultLoadout
-	local weaponId = defaultLoadout[slot]
-	if weaponId then
-		WeaponService.HandleEquipRequest(player, weaponId, slot)
+	if ActiveSlot[player] == slot then
+		ActiveSlot[player] = nil
+		Net.ServerFire(player, "WeaponUnequipped", { Slot = slot })
 	end
 end
 
-function WeaponService.GetLoadout(
-	player: Player
-): { Primary: string?, Secondary: string?, Melee: string?, Utility: string? }
-	return PlayerLoadouts[player] or { Primary = nil, Secondary = nil, Melee = nil, Utility = nil }
+function WeaponService.GetLoadout(player: Player): { [string]: string }
+	return PlayerLoadouts[player] or {}
 end
 
-function WeaponService.GetEquippedWeapon(player: Player, slot: string): string?
-	return PlayerLoadouts[player] and PlayerLoadouts[player][slot]
+function WeaponService.GetActiveSlot(player: Player): string?
+	return ActiveSlot[player]
 end
 
 function WeaponService.CleanupPlayer(player: Player)
 	PlayerLoadouts[player] = nil
+	ActiveSlot[player] = nil
 end
 
 return WeaponService
