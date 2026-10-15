@@ -76,16 +76,29 @@
 
 | Task | Status |
 |------|--------|
-| Lag compensation: rewind buffer wired to movement | 🔄 |
-| Hit validation with movement prediction | 🔄 |
+| Lag compensation: rewind buffer wired to movement | ✅ model-keyed, covers bots |
+| Hit validation with movement prediction | ✅ tolerance = 10 + velocity × latency |
 | 200ms ping simulation test | 🔄 |
-| Bot AI (spawn, move, aim, fire) | 🔄 |
-| Wallbang rejection test | 🔄 |
-| Heartbeat ≤ 8ms budget | 🔄 |
-| Studio playtest: full combat loop | 🔄 |
+| Bot AI (spawn, move, aim, fire) | ✅ R15, LOS, reaction delay, respawn |
+| Wallbang rejection test | ✅ automated (sb-test gate3) |
+| Heartbeat ≤ 8ms budget | 🔄 needs script-time measurement |
+| Studio playtest: full combat loop | ✅ automated / 🔄 Wahab playtest #2 |
 
 **Gate 3 Target:** Spoofed FireEvent deals 0 damage; legit shots kill; rejects logged
+**Gate 3: PASSED** (4963ef8, `bash tools/sb-test.sh`): stale timestamp, spoofed origin,
+spoofed hit, wallbang, self-hit → all rejected, 0 damage, suspicion logged; rapid fire →
+INVALID_RATE; 2 legit headshots kill; ammo spent only on accepted shots; live client shot
+via GunController lands (100 → 44 @ 25 studs).
 **Gate 4 Target:** Hits register at 200 ms ping; wallbangs rejected; Heartbeat ≤ 8 ms
+
+### Playtest #1 findings (fixed in 76f2fa4, 0e8d43a, 4963ef8)
+- Boot crash: `Init.*.luau` ran twice (Rojo init case-match) → renamed `Main.*.luau`;
+  empty `src/shared/Types/` dir shadowed `Types.luau`.
+- Player shots never registered (no Target, wrong clock); bot killed through walls.
+- RateLimiter allowed ~100 shots/s; HitboxHistory rewound wrong frames after wrap;
+  Plastic was shoot-through; falloff read backwards; reload instant.
+- Weapon grant equipped all 4 slots (ended holding the grenade).
+- Local gate `check.sh` could never fail (fixed, proven with a planted type error).
 
 ## Week 3-4 (Core Combat) — PLANNED
 
