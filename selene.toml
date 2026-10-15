@@ -7,4 +7,4 @@ unscoped_variables = "warn"
 incorrect_standard_library_use = "allow"
 
 [config]
-exclude = ["types/**", "tests/**", "Packages/**"]
+exclude = ["types/**", "tests/**", "Packages/**", "DevPackages/**", "src/shared/Vendor/**"]

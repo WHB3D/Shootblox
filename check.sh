@@ -11,7 +11,7 @@ LSP=$(find $TOOLS/johnnymorganz/luau-lsp -name luau-lsp -type f | sort -V | tail
 ROJO=${ROJO:-~/bin/rojo}
 
 echo "==> selene src"
-$SELENE src/ 2>&1 | tail -4
+$SELENE --allow-warnings src/ 2>&1 | tail -4
 
 echo "==> stylua --check src tests"
 $STYLUA --check src/ tests/

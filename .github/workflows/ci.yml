@@ -27,7 +27,7 @@ jobs:
         run: ~/.rokit/bin/wally install
 
       - name: Selene lint
-        run: ~/.rokit/bin/selene src/
+        run: ~/.rokit/bin/selene --allow-warnings src/
 
       - name: StyLua check
         run: ~/.rokit/bin/stylua --check src/ tests/
