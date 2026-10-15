@@ -6,13 +6,6 @@ on:
   pull_request:
     branches: [main]
 
-env:
-  ROJO_VERSION: 7.7.1
-  WALLY_VERSION: 0.3.2
-  SELENE_VERSION: 0.29.1
-  STYLUA_VERSION: 2.3.1
-  LUau_LSP_VERSION: 1.53.0
-
 jobs:
   lint-and-typecheck:
     name: Lint & Typecheck
@@ -21,30 +14,25 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup rokit
-        uses: rokit/rokit/setup-rokit@v1
-        with:
-          versions: |
-            rojo@${{ env.ROJO_VERSION }}
-            wally@${{ env.WALLY_VERSION }}
-            selene@${{ env.SELENE_VERSION }}
-            stylua@${{ env.STYLUA_VERSION }}
-            luau-lsp@${{ env.LUau_LSP_VERSION }}
-
-      - name: Install Wally dependencies
-        run: wally install
+      - name: Install rokit + tools
+        run: |
+          curl -sL https://github.com/rojo-rbx/rokit/releases/latest/download/rokit-1.2.0-linux-x86_64.zip -o rokit.zip
+          unzip -o rokit.zip
+          chmod +x rokit
+          echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit install
 
       - name: Selene lint
-        run: selene src/
+        run: ~/.rokit/bin/selene src/
 
       - name: StyLua check
-        run: stylua --check src/
+        run: ~/.rokit/bin/stylua --check src/
 
       - name: Generate Rojo sourcemap
-        run: rojo sourcemap -o sourcemap.json
+        run: ~/.rokit/bin/rojo sourcemap -o sourcemap.json
 
       - name: luau-lsp analyze
-        run: luau-lsp analyze --sourcemap sourcemap.json --definitions types/globalTypes.d.lua src/
+        run: ~/.rokit/bin/luau-lsp analyze --sourcemap sourcemap.json --definitions types/globalTypes.d.lua src/
 
   build:
     name: Build Place
@@ -54,18 +42,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup rokit
-        uses: rokit/rokit/setup-rokit@v1
-        with:
-          versions: |
-            rojo@${{ env.ROJO_VERSION }}
-            wally@${{ env.WALLY_VERSION }}
-
-      - name: Install Wally dependencies
-        run: wally install
+      - name: Install rokit + tools
+        run: |
+          curl -sL https://github.com/rojo-rbx/rokit/releases/latest/download/rokit-1.2.0-linux-x86_64.zip -o rokit.zip
+          unzip -o rokit.zip
+          chmod +x rokit
+          echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit install
 
       - name: Build place
-        run: rojo build -o shootblox.rbxl
+        run: ~/.rokit/bin/rojo build -o shootblox.rbxl
 
       - name: Upload place artifact
         uses: actions/upload-artifact@v4
@@ -81,18 +67,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup rokit
-        uses: rokit/rokit/setup-rokit@v1
-        with:
-          versions: |
-            rojo@${{ env.ROJO_VERSION }}
-            wally@${{ env.WALLY_VERSION }}
-
-      - name: Install Wally dependencies
-        run: wally install
+      - name: Install rokit + tools
+        run: |
+          curl -sL https://github.com/rojo-rbx/rokit/releases/latest/download/rokit-1.2.0-linux-x86_64.zip -o rokit.zip
+          unzip -o rokit.zip
+          chmod +x rokit
+          echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit install
 
       - name: Build test place
-        run: rojo build -o shootblox-test.rbxl --project tests.project.json
+        run: ~/.rokit/bin/rojo build -o shootblox-test.rbxl --project tests.project.json
 
       - name: Upload test place
         uses: actions/upload-artifact@v4
@@ -104,7 +88,6 @@ jobs:
         run: |
           echo "::notice::Unit tests run in Roblox Studio via TestEZ."
           echo "Open shootblox-test.rbxl in Studio, run TestEZ.TestBootstrap:run() from tests/run.luau"
-          echo "See tests/CombatService/*.spec.luau for 9 validation check tests"
 
   publish-staging:
     name: Publish Staging
@@ -121,11 +104,13 @@ jobs:
           name: shootblox-place
           path: .
 
-      - name: Setup rbxcloud
-        uses: rokit/rokit/setup-rokit@v1
-        with:
-          versions: |
-            rbxcloud@0.17.0
+      - name: Install rokit + tools
+        run: |
+          curl -sL https://github.com/rojo-rbx/rokit/releases/latest/download/rokit-1.2.0-linux-x86_64.zip -o rokit.zip
+          unzip -o rokit.zip
+          chmod +x rokit
+          echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit install
 
       - name: Publish to staging
         env:
@@ -133,7 +118,7 @@ jobs:
           ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
           ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_STAGING_PLACE_ID }}
         run: |
-          rbxcloud experience publish -f shootblox.rbxl \
+          ~/.rokit/bin/rbxcloud experience publish -f shootblox.rbxl \
             -u $ROBLOX_UNIVERSE_ID \
             -p $ROBLOX_PLACE_ID \
             -t published
@@ -159,11 +144,13 @@ jobs:
           name: shootblox-place
           path: .
 
-      - name: Setup rbxcloud
-        uses: rokit/rokit/setup-rokit@v1
-        with:
-          versions: |
-            rbxcloud@0.17.0
+      - name: Install rokit + tools
+        run: |
+          curl -sL https://github.com/rojo-rbx/rokit/releases/latest/download/rokit-1.2.0-linux-x86_64.zip -o rokit.zip
+          unzip -o rokit.zip
+          chmod +x rokit
+          echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit install
 
       - name: Publish to production
         env:
@@ -171,7 +158,7 @@ jobs:
           ROBLOX_UNIVERSE_ID: ${{ secrets.ROBLOX_UNIVERSE_ID }}
           ROBLOX_PLACE_ID: ${{ secrets.ROBLOX_PRODUCTION_PLACE_ID }}
         run: |
-          rbxcloud experience publish -f shootblox.rbxl \
+          ~/.rokit/bin/rbxcloud experience publish -f shootblox.rbxl \
             -u $ROBLOX_UNIVERSE_ID \
             -p $ROBLOX_PLACE_ID \
             -t published
