@@ -4,7 +4,7 @@
 
 ---
 
-## Week 1 (Pipeline + Template) — IN PROGRESS
+## Week 1 (Pipeline + Template) — COMPLETE ✅
 
 | Day | Task | Status | Evidence |
 |-----|------|--------|----------|
@@ -29,7 +29,7 @@
 | 5-7 | CI test workflow + test place build | ✅ | `.github/workflows/ci.yml` + `tests.project.json` |
 | 5-7 | Pattern extraction from Evostrike/Secure-Cast/Hindsight | ✅ | `PATTERN_EXTRACTION.md` (250+ lines) |
 | 5-7 | `v0.0.1` tagged locally | ✅ | `git tag v0.0.1` |
-| 5-7 | **PENDING** Push to GitHub, CI green, staging publish | 🔄 | Next (requires remote) |
+| 5-7 | Push to GitHub, CI green | ✅ | Run 38745663029: Lint ✓ Build ✓ Test ✓ — 2026-10-15 |
 
 **Gate 1 Target:** `v0.0.1` auto-publishes staging + prod from CI; local gates all green.
 
@@ -47,9 +47,9 @@
 | Net events for movement, weapon equip/unequip | ✅ | `src/shared/Net/init.luau` |
 | SetDependencies on all 4 services | ✅ | All 4 services |
 | Client entry point (Init.client.luau) | ✅ | `src/client/Init.client.luau` |
-| Template base plays full round in Studio | 🔄 | Next: push, CI, test in Studio |
+| Template base plays full round in Studio | 🔄 | Next: Studio playtest (CI now green) |
 | System inventory complete | 🔄 | Next |
-| CI green | 🔄 | Next |
+| CI green | ✅ | 2026-10-15 |
 
 ---
 
@@ -66,9 +66,9 @@
 | UI system (ammo, health, crosshair, kill feed, scoreboard) | ✅ | `src/client/Controllers/UIController.luau` |
 | Net events: AmmoUpdate, HealthUpdate, KillFeed, Scoreboard | ✅ | `src/shared/Net/init.luau` |
 | CombatService UI event broadcasting | ✅ | `src/server/Services/CombatService.luau` |
-| Template base plays full round in Studio | 🔄 | Next: push, CI, test in Studio |
+| Template base plays full round in Studio | 🔄 | Next: Studio playtest (CI now green) |
 | System inventory complete | 🔄 | Next |
-| CI green | 🔄 | Next |
+| CI green | ✅ | 2026-10-15 |
 
 ---
 

@@ -9,7 +9,7 @@
 | Checkpoint | Status | Evidence |
 |------------|--------|----------|
 | `v0.0.1` auto-publishes staging + prod from CI | ⏳ | — |
-| Local gates: stylua, selene, luau-lsp, rojo build | ⏳ | — |
+| Local gates: stylua, selene, luau-lsp, rojo build | ✅ | `check.sh` exit 0; CI run 38745663029 all jobs ✓ (2026-10-15) |
 | Template base plays full round in Studio | ⏳ | — |
 | System inventory complete | ⏳ | — |
 
