@@ -128,9 +128,10 @@ export type ShotRequest = {
 	WeaponId: string,
 	Origin: Vector3,
 	Direction: Vector3,
-	Target: Instance?, -- optional for hitscan
+	Target: Instance?, -- hit character Model; nil = a miss (still spends ammo)
 	HitPosition: Vector3?,
 	HitNormal: Vector3?,
+	HitPart: string?, -- name of the character part the client hit (e.g. "Head")
 	Timestamp: number, -- client tick
 	ServerTick: number,
 	ShotId: string, -- unique per-shot identifier

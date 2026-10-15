@@ -37,7 +37,34 @@ function UIController.Init()
 	UIController.CreateHUD()
 	UIController.BindNetEvents()
 
+	-- Health comes straight from the replicated Humanoid, so every damage
+	-- source (players, bots, falls) shows up without a dedicated remote
+	local function bindHumanoid(character: Model)
+		local humanoid = character:WaitForChild("Humanoid", 10)
+		if not humanoid or not humanoid:IsA("Humanoid") then
+			return
+		end
+		local function sync()
+			currentHealth = humanoid.Health
+			maxHealth = humanoid.MaxHealth
+			UIController.UpdateHealthDisplay()
+		end
+		humanoid.HealthChanged:Connect(sync)
+		sync()
+	end
+	player.CharacterAdded:Connect(bindHumanoid)
+	if player.Character then
+		task.spawn(bindHumanoid, player.Character)
+	end
+
 	print("[UIController] Initialized")
+end
+
+-- GunController's predicted ammo (the server corrects via INVALID_AMMO/Reloaded)
+function UIController.SetAmmo(current: number, reserve: number)
+	currentAmmo = current
+	reserveAmmo = reserve
+	UIController.UpdateAmmoDisplay()
 end
 
 function UIController.CreateHUD()
@@ -250,7 +277,7 @@ function UIController.UpdateHealthDisplay()
 			or Color3.fromRGB(255, 60, 60)
 	end
 	if healthText then
-		healthText.Text = currentHealth .. " / " .. maxHealth
+		healthText.Text = math.ceil(currentHealth) .. " / " .. math.ceil(maxHealth)
 	end
 end
 

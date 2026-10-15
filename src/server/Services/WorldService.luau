@@ -91,7 +91,7 @@ function WorldService.BuildArena()
 	spawn.Name = "Spawn"
 	spawn.Anchored = true
 	spawn.Neutral = true
-	spawn.Duration = 0
+	spawn.Duration = 3 -- spawn protection: ForceField blocks TakeDamage; bots hold fire
 	spawn.Size = Vector3.new(8, 1, 8)
 	spawn.Position = Vector3.new(0, 0.5, 0)
 	spawn.Material = Enum.Material.Neon

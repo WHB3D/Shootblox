@@ -19,6 +19,9 @@
       }
     },
     "StarterPlayer": {
+      "$properties": {
+        "CameraMode": "LockFirstPerson"
+      },
       "StarterPlayerScripts": {
         "Client": {
           "$path": "src/client"
