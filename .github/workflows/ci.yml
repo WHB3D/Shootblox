@@ -20,6 +20,7 @@ jobs:
           unzip -o rokit.zip
           chmod +x rokit
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit trust rojo-rbx/rojo UpliftGames/wally kampfkarren/selene JohnnyMorganz/stylua JohnnyMorganz/luau-lsp lune-org/lune Sleitnick/rbxcloud
           ./rokit install
 
       - name: Install Wally packages
@@ -51,6 +52,7 @@ jobs:
           unzip -o rokit.zip
           chmod +x rokit
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit trust rojo-rbx/rojo UpliftGames/wally kampfkarren/selene JohnnyMorganz/stylua JohnnyMorganz/luau-lsp lune-org/lune Sleitnick/rbxcloud
           ./rokit install
 
       - name: Install Wally packages
@@ -79,6 +81,7 @@ jobs:
           unzip -o rokit.zip
           chmod +x rokit
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit trust rojo-rbx/rojo UpliftGames/wally kampfkarren/selene JohnnyMorganz/stylua JohnnyMorganz/luau-lsp lune-org/lune Sleitnick/rbxcloud
           ./rokit install
 
       - name: Install Wally packages
@@ -119,6 +122,7 @@ jobs:
           unzip -o rokit.zip
           chmod +x rokit
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit trust rojo-rbx/rojo UpliftGames/wally kampfkarren/selene JohnnyMorganz/stylua JohnnyMorganz/luau-lsp lune-org/lune Sleitnick/rbxcloud
           ./rokit install
 
       - name: Publish to staging
@@ -159,6 +163,7 @@ jobs:
           unzip -o rokit.zip
           chmod +x rokit
           echo "$HOME/.rokit/bin" >> $GITHUB_PATH
+          ./rokit trust rojo-rbx/rojo UpliftGames/wally kampfkarren/selene JohnnyMorganz/stylua JohnnyMorganz/luau-lsp lune-org/lune Sleitnick/rbxcloud
           ./rokit install
 
       - name: Publish to production
