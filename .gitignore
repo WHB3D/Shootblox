@@ -48,3 +48,7 @@ test-results/
 # wally dev-dependencies (also fetched, not authored)
 /DevPackages/
 shootblox-selftest.rbxl
+
+# Studio lock files
+*.rbxl.lock
+*.rbxlx.lock
