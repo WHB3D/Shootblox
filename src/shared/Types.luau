@@ -21,6 +21,7 @@ export type WeaponConfig = {
 	ProjectileType: "Hitscan" | "Projectile" | "Beam",
 	RecoilPattern: { Vector2 }?,
 	ViewModelOffset: CFrame?,
+	ADSSpeed: number?, -- frame-scaled lerp constant (1 - e^-k*dt); higher = snappier. Default in ViewmodelController.
 	Sounds: {
 		Fire: string?,
 		Reload: string?,

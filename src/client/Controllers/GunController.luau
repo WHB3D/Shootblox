@@ -71,6 +71,8 @@ function GunController.Init()
 			reserveByWeapon[data.WeaponId] = math.max(0, reserve - (data.Ammo - currentAmmo))
 			currentAmmo = data.Ammo
 			isReloading = false
+			ViewmodelController.SetReloading(false)
+			ViewmodelController.ResetRecoil()
 			GunController.UpdateAmmoUI()
 		end
 	end)
@@ -236,6 +238,7 @@ function GunController.Reload()
 		return
 	end
 	isReloading = true
+	ViewmodelController.SetReloading(true)
 	-- TODO: ViewmodelController.PlayAnimation("Reload")
 	Net.ClientFire("Reload", { WeaponId = weaponId })
 end

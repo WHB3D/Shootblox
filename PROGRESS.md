@@ -125,7 +125,39 @@ over the 8ms budget across ~900 frames/run.
 - Weapon grant equipped all 4 slots (ended holding the grenade).
 - Local gate `check.sh` could never fail (fixed, proven with a planted type error).
 
-## Week 3-4 (Core Combat) — PLANNED
+## Week 5-8 (Game Loop) — IN PROGRESS
+
+### ViewModel P0 (Ch.6 Gunfeel Checklist) — 2026-10-17
+
+| Row | Status |
+|-----|--------|
+| Camera-parented VM rig (no-collision, no shadows) | ✅ `NoCollisionViewModel` group, `CastShadow=false`, driven via `BindToRenderStep` at `Camera.Value + 1` |
+| Ordered offset composition (array, not dict) | ✅ `{ aimCF, swayCF, bobCF, recoilCF }`, fold-multiplied in order |
+| Mouse-delta sway spring (8-substep) | ✅ `src/shared/Spring.luau` (verbatim Blueprint §6.1.1 reference module) |
+| ADS: AimPart lerp + FOV lerp | 🔄 position lerp done (frame-scaled, per-weapon `ADSSpeed`); FOV lerp not wired (no CameraController yet); literal AimPart part not built — no real weapon mesh to weld it to yet, `ViewModelOffset`/`ADS_OFFSET` stand in |
+| Procedural recoil split camera + VM | ✅ `recoilSpring` (viewmodel kickback) + `cameraKickSpring` (nudges live camera CFrame post-update), both under-damped, recovery starts only once shots stop shoving them |
+| Spread bloom + dynamic crosshair gap | ⏳ not started |
+| Equip time enforced; tactical vs empty reload | ⏳ not started (`ReloadTime` exists; equip-time + reload-cancel rules don't) |
+
+**Fixed the actual "gun swims" bug named in the Blueprint** (§6.1.1): the old code lerped
+the *entire* final CFrame (`viewmodelRoot.CFrame:Lerp(finalCF, ...)`), double-smoothing on
+top of the offset chain's own springs/lerps. Now `viewmodelRoot.CFrame = camera.CFrame *
+chain` every frame, no extra smoothing layer. ADS also made per-weapon-tunable
+(`WeaponConfig.ADSSpeed`) and suppressed to 0 during reload (`ViewmodelController.
+SetReloading`) — Blueprint §6.1.2 trap 1 ("ADS-during-reload transfers gun motion into
+camera wobble"). Verified via 3 live `sb-test.sh` runs: no CreatorErrors, gate3/gate4
+still PASS.
+
+**Bug found and fixed in the process:** `MovementService.FlagSuspicious` crashed with a
+`CreatorError` (`invalid argument #4 to 'format'`) the one time it actually fired — it
+passed a details *table* into a `%s` format slot. Fixed to match `CombatService.
+FlagSuspicion`'s key=value formatting. This was latent and unrelated to the viewmodel
+work; it just happened to get triggered live for the first time this session.
+
+**Gate 5 remaining:** slide-jump chain (structurally unblocked — nothing in
+`MovementController`/`MovementService` stops jumping out of a slide and carrying
+`slideVelocity`, but real chain *feel* needs a human playtest, not something the
+automated harness can judge), spread bloom/crosshair, equip-time/reload-cancel rules.
 
 ---
 
@@ -138,7 +170,7 @@ over the 8ms budget across ~900 frames/run.
 
 ---
 
-## Week 5-8 (Game Loop) — PLANNED
+## Week 5-8 (Game Loop) — IN PROGRESS
 
 | Gate | Target |
 |------|--------|
@@ -171,10 +203,14 @@ over the 8ms budget across ~900 frames/run.
 
 ---
 
-**Next Session:** Gate 4 passed — Week 5-8 (Game Loop) is next: slide-jump chain,
-ADS-instant, ViewModel P0 rows, duel matchmaking (Gate 5/6). Separately: `main` has
-never been merged into (only `dev` is pushed to origin), so staging has never actually
-auto-published — Gate 1's "`v0.0.1` auto-publishes staging + prod from CI" checkpoint is
-still open despite Week 1 being marked complete. And the CI `test` job gap above (TestEZ
-never runs headlessly) should get fixed before Week 5-8 adds more validation logic that
-needs real regression coverage.
+**Next Session:** Finish Gate 5 (spread bloom/dynamic crosshair, equip-time/reload-cancel
+rules; slide-jump chain needs a human playtest to confirm feel), then Gate 6 (duel
+matchmaking/rejoin — needs Team Test or two real accounts, can't be verified by the
+single-client self-test harness at all). Separately: `main` has never been merged into
+(only `dev` is pushed to origin), so staging has never actually auto-published — Gate 1's
+"`v0.0.1` auto-publishes staging + prod from CI" checkpoint is still open despite Week 1
+being marked complete. Deliberately deferred: Wahab has no Roblox Open Cloud credentials
+provisioned yet and this game is for his son Ali, not a personal project — wire up
+publishing before the first real playtest with Ali, not before. And the CI `test` job gap
+above (TestEZ never runs headlessly) should get fixed before Week 5-8 adds more
+validation logic that needs real regression coverage.

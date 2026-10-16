@@ -186,8 +186,12 @@ function MovementService.ValidatePositions(dt: number)
 	end
 end
 
-function MovementService.FlagSuspicious(player: Player, reason: string, details: any)
-	warn(string.format("[MovementService] Suspicious: %s - %s (%s)", player.Name, reason, details))
+function MovementService.FlagSuspicious(player: Player, reason: string, details: { [string]: any })
+	local parts = {}
+	for k, v in details do
+		table.insert(parts, k .. "=" .. tostring(v))
+	end
+	warn(string.format("[MovementService] Suspicious: %s - %s (%s)", player.Name, reason, table.concat(parts, ", ")))
 	-- Could integrate with strike system here
 	-- DataService.AddStrike(player, "Movement: " .. reason)
 end
