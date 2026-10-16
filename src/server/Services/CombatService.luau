@@ -54,6 +54,14 @@ CombatService.Codes = ValidationCode
 -- Server clock (os.clock) time each player's reload finishes
 local ReloadingUntil: { [Player]: number } = {}
 
+-- Studio self-test only: GetNetworkPing() is always ~0 in Play Solo (no real
+-- network), so Gate 4's "hits register at 200ms ping" can't be exercised
+-- without overriding it. Never set outside SelfTest.
+local SimulatedPing: { [Player]: number? } = {}
+function CombatService.SetSimulatedPing(player: Player, seconds: number?)
+	SimulatedPing[player] = seconds
+end
+
 local function reject(code: string): ValidationResult
 	return { Valid = false, RejectReason = code }
 end
@@ -113,6 +121,7 @@ function CombatService.Init()
 
 	Players.PlayerRemoving:Connect(function(player)
 		ReloadingUntil[player] = nil
+		SimulatedPing[player] = nil
 	end)
 
 	print("[CombatService] Initialized - 11-step validation pipeline active")
@@ -165,16 +174,19 @@ function CombatService.ValidateShot(player: Player, request: ShotRequest): Valid
 		return reject(ValidationCode.InvalidState)
 	end
 
-	-- STEP 3: Rate of fire (time since last ACCEPTED shot)
-	if not RateLimiter.CheckShot(player, request.WeaponId, weapon.FireRate, request.Timestamp) then
-		return reject(ValidationCode.InvalidRate)
-	end
-
-	-- STEP 4: Timestamp window (client must stamp with GetServerTimeNow; its
-	-- synced estimate can run a few ms ahead of the server's)
+	-- STEP 3: Timestamp window (client must stamp with GetServerTimeNow; its
+	-- synced estimate can run a few ms ahead of the server's). Checked before
+	-- rate limiting: a stale/replayed timestamp must reject as such, not get
+	-- misclassified as a rate violation because it happens to land close to
+	-- the last accepted shot's timestamp.
 	local latency = workspace:GetServerTimeNow() - request.Timestamp
 	if latency < -CLOCK_SKEW or latency > MAX_LATENCY then
 		return reject(ValidationCode.InvalidTimestamp)
+	end
+
+	-- STEP 4: Rate of fire (time since last ACCEPTED shot)
+	if not RateLimiter.CheckShot(player, request.WeaponId, weapon.FireRate, request.Timestamp) then
+		return reject(ValidationCode.InvalidRate)
 	end
 	latency = math.max(latency, 0)
 
@@ -267,7 +279,8 @@ function CombatService.ValidateTarget(
 	end
 
 	-- Favor the shooter: rewind to when they saw the target
-	local rewindTime = request.Timestamp - (player:GetNetworkPing() + INTERPOLATION_BUFFER)
+	local ping = SimulatedPing[player] or player:GetNetworkPing()
+	local rewindTime = request.Timestamp - (ping + INTERPOLATION_BUFFER)
 	local rewound = HitboxHistory.RewindTo(targetModel, rewindTime)
 	if not rewound then
 		return reject(ValidationCode.InvalidTarget)

@@ -72,16 +72,16 @@
 
 ---
 
-## Week 4 (Core Combat - Validation) — IN PROGRESS
+## Week 4 (Core Combat - Validation) — COMPLETE ✅
 
 | Task | Status |
 |------|--------|
 | Lag compensation: rewind buffer wired to movement | ✅ model-keyed, covers bots |
 | Hit validation with movement prediction | ✅ tolerance = 10 + velocity × latency |
-| 200ms ping simulation test | 🔄 |
+| 200ms ping simulation test | ✅ automated (sb-test gate4, real rewind, not arithmetic) |
 | Bot AI (spawn, move, aim, fire) | ✅ R15, LOS, reaction delay, respawn |
 | Wallbang rejection test | ✅ automated (sb-test gate3) |
-| Heartbeat ≤ 8ms budget | 🔄 needs script-time measurement |
+| Heartbeat ≤ 8ms budget | ✅ measured (PerfMonitor), avg/max 0.00ms over 2 playtests |
 | Studio playtest: full combat loop | ✅ automated / 🔄 Wahab playtest #2 |
 
 **Gate 3 Target:** Spoofed FireEvent deals 0 damage; legit shots kill; rejects logged
@@ -90,6 +90,31 @@ spoofed hit, wallbang, self-hit → all rejected, 0 damage, suspicion logged; ra
 INVALID_RATE; 2 legit headshots kill; ammo spent only on accepted shots; live client shot
 via GunController lands (100 → 44 @ 25 studs).
 **Gate 4 Target:** Hits register at 200 ms ping; wallbangs rejected; Heartbeat ≤ 8 ms
+**Gate 4: PASSED** (2026-10-17, `bash tools/sb-test.sh`, reproduced twice): a bot strafes
+30 studs/s in real server time; the self-test fires at its lag-compensated *rendered*
+position (6.0–6.5 studs behind its live position) under `CombatService.SetSimulatedPing`
+= 200ms (Studio-only override — `GetNetworkPing()` is ~0 in Play Solo) — shot lands
+through the real pipeline (56 dmg). `PerfMonitor` sums actual script time inside
+Shootblox's own Heartbeat handlers (HitboxHistory capture, movement validation, bot AI),
+separate from Roblox's own per-frame physics/replication cost: avg/max 0.00ms, 0 samples
+over the 8ms budget across ~900 frames/run.
+
+### Bugs found by the Gate 4 probe (fixed same session)
+- `stale_timestamp` sometimes misclassified as `INVALID_RATE` instead of `INVALID_TIMESTAMP`:
+  RateLimiter ran before the timestamp-window check, so a stale/replayed timestamp that
+  happened to land near the last accepted shot's timestamp got caught by rate limiting
+  first. Fixed: timestamp window now validates before rate limiting.
+- Gate 4 probe raced bot respawn: `BotService.GetBots()` is empty for the 3s respawn
+  delay after a bot dies, so a single snapshot check could find no bot. Fixed: poll with
+  an 10s deadline like the gate3 probe does.
+
+### Known gap (not fixed this session — flagging for Wahab)
+- CI's `test` job does **not** run TestEZ; it builds `shootblox-test.rbxl` and prints a
+  notice telling a human to open it in Studio manually. The `tests/**/*.spec.luau` files
+  (incl. `LagCompensation.spec.luau`) never actually execute in CI. Everything checked
+  here was verified by the real Play-mode harness (`sb-test.sh`), not by CI's test job.
+  Needs a headless TestEZ runner (Lune can run pure-module Luau without Studio) before
+  this can be trusted as a real gate.
 
 ### Playtest #1 findings (fixed in 76f2fa4, 0e8d43a, 4963ef8)
 - Boot crash: `Init.*.luau` ran twice (Rojo init case-match) → renamed `Main.*.luau`;
@@ -146,4 +171,10 @@ via GunController lands (100 → 44 @ 25 studs).
 
 ---
 
-**Next Session:** Push to GitHub remote, verify CI green, merge to `main`, auto-publish staging, test template base + weapon system in Studio, begin Week 4 (lag comp integration, hit validation with movement).
+**Next Session:** Gate 4 passed — Week 5-8 (Game Loop) is next: slide-jump chain,
+ADS-instant, ViewModel P0 rows, duel matchmaking (Gate 5/6). Separately: `main` has
+never been merged into (only `dev` is pushed to origin), so staging has never actually
+auto-published — Gate 1's "`v0.0.1` auto-publishes staging + prod from CI" checkpoint is
+still open despite Week 1 being marked complete. And the CI `test` job gap above (TestEZ
+never runs headlessly) should get fixed before Week 5-8 adds more validation logic that
+needs real regression coverage.

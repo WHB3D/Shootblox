@@ -18,3 +18,5 @@
 | 2026-10-14 | Roblox FPS Framework via `assets/templates/` | 2 | Limited Use License; arena + weapon models extracted legally |
 | 2026-10-14 | Arena Clash → cherry-pick only | 2 | MapService, Config patterns, Net pattern, Round state machine, Bot AI, AdminService |
 | 2026-10-14 | Blackout / MonzterDev → study only | 1 | No license / unlicensed; architecture study only |
+| 2026-10-17 | `CombatService` validates the timestamp window before the rate limiter | 2 | Found via Gate 4 probe: a stale/replayed timestamp that lands near the last accepted shot's timestamp was misclassified `INVALID_RATE` instead of `INVALID_TIMESTAMP`; timestamp sanity must gate before using that timestamp for rate math |
+| 2026-10-17 | `CombatService.SetSimulatedPing` + `PerfMonitor` module, Studio-only | 2 | `Player:GetNetworkPing()` is ~0 in Play Solo and Roblox's Heartbeat `dt` includes physics/replication cost outside our control — Gate 4 ("200ms ping", "Heartbeat ≤ 8ms") needed real overridable/measurable signals, not constant-math unit tests, to actually prove the gate |

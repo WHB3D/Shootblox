@@ -1,8 +1,11 @@
 --!strict
 --[[
 	SHOOTBLOX — Lag Compensation Test
-	Simulates 200ms ping and validates that rewind-based hit validation works.
-	Gate 4 target: "Hits register at 200 ms ping"
+	Sanity-checks the formulas CombatService's rewind math is built from.
+	This does NOT exercise the real pipeline (no live HitboxHistory, no real
+	Heartbeat) and TestEZ specs don't run headlessly in CI yet (see
+	PROGRESS.md "Known gap") — the actual Gate 4 proof is the live Play probe
+	in src/server/SelfTest.luau (probeLagComp), run via tools/sb-test.sh.
 ]]
 
 local TestEZ = require(game:GetService("ReplicatedStorage").Packages.TestEZ)

@@ -16,6 +16,7 @@ local RunService = game:GetService("RunService")
 
 local Net = require(ReplicatedStorage.Shared.Net)
 local HitboxHistory = require(script.Parent.HitboxHistory)
+local PerfMonitor = require(script.Parent.PerfMonitor)
 
 local BotService = {}
 
@@ -108,7 +109,7 @@ end
 function BotService.SetDependencies(_deps) end
 
 function BotService.Init()
-	RunService.Heartbeat:Connect(BotService.Update)
+	RunService.Heartbeat:Connect(PerfMonitor.Track("BotService", BotService.Update))
 
 	-- Solo player? Give them something to shoot (own thread: Init never yields)
 	Players.PlayerAdded:Connect(function()

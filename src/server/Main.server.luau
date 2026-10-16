@@ -18,6 +18,11 @@ local MovementService = require(Services.MovementService)
 local WeaponService = require(Services.WeaponService)
 local BotService = require(Services.BotService)
 local WorldService = require(Services.WorldService)
+local PerfMonitor = require(Services.PerfMonitor)
+
+-- Must connect before any service's Init() so every Track()-wrapped Heartbeat
+-- handler below lands its time in the frame it ran in (see PerfMonitor).
+RunService.Heartbeat:Connect(PerfMonitor.BeginFrame)
 
 type Service = { Init: () -> (), SetDependencies: ((any) -> ())? }
 
@@ -64,9 +69,13 @@ if RunService:IsStudio() and game:GetService("ReplicatedStorage"):FindFirstChild
 	task.spawn(require(script.Parent.SelfTest).run)
 end
 
--- Frame budget monitor (Blueprint Gate 4: Heartbeat ≤ 8 ms)
+-- Frame budget monitor (Blueprint Gate 4: Heartbeat ≤ 8 ms).
+-- dt is Roblox's own Heartbeat interval (physics + replication + every
+-- script); PerfMonitor.EndFrame (connected last) reports only the script
+-- time Shootblox's own Track()-wrapped handlers spent this frame.
 RunService.Heartbeat:Connect(function(dt)
 	if dt > 0.033 then
 		warn(string.format("[Perf] Frame time: %.1fms", dt * 1000))
 	end
 end)
+RunService.Heartbeat:Connect(PerfMonitor.EndFrame)

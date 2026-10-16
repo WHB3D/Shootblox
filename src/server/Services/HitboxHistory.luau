@@ -9,6 +9,8 @@
 local RunService = game:GetService("RunService")
 local Players = game:GetService("Players")
 
+local PerfMonitor = require(script.Parent.PerfMonitor)
+
 local HitboxHistory = {}
 
 local TICK_RATE = 60 -- Hz
@@ -106,7 +108,7 @@ function HitboxHistory.RewindTo(model: Model, atTime: number): { [string]: CFram
 end
 
 function HitboxHistory.Init()
-	RunService.Heartbeat:Connect(HitboxHistory.Capture)
+	RunService.Heartbeat:Connect(PerfMonitor.Track("HitboxHistory", HitboxHistory.Capture))
 	print("[HitboxHistory] Initialized - 60Hz ring buffer, " .. BUFFER_SIZE .. " entries")
 end
 

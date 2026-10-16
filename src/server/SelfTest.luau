@@ -8,6 +8,7 @@
 
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
 
 local SelfTest = {}
 
@@ -187,6 +188,107 @@ local function probeCombat()
 	BotService.SetPaused(false)
 end
 
+-- Gate 4: a target crosses the player's crosshair while moving; the shot is
+-- aimed at where a 200ms-ping client would have RENDERED it (rewound
+-- history), not its live position. Must still land through the real
+-- pipeline, proving lag compensation — not just that latency is tolerated.
+local function probeLagComp()
+	local CombatService = require(script.Parent.Services.CombatService) :: any
+	local BotService = require(script.Parent.Services.BotService) :: any
+	local HitboxHistory = require(script.Parent.Services.HitboxHistory) :: any
+
+	local player = Players:GetPlayers()[1]
+	-- A bot that just died is gone from GetBots() for RESPAWN_DELAY (3s)
+	-- before its replacement spawns; poll instead of a single snapshot.
+	local deadline = os.clock() + 10
+	local character: any, head: any, bot: any
+	repeat
+		task.wait(0.25)
+		character = player and player.Character
+		head = character and character:FindFirstChild("Head")
+		bot = BotService.GetBots()[1]
+	until (head and head:IsA("BasePart") and bot and character:FindFirstChildOfClass("Humanoid").Health > 0)
+		or os.clock() > deadline
+	if not (head and head:IsA("BasePart") and bot) then
+		diag("gate4 FAIL setup: no player head or bot")
+		return
+	end
+	BotService.SetPaused(true)
+
+	local botHumanoid = bot:FindFirstChildOfClass("Humanoid") :: Humanoid
+	botHumanoid.Health = botHumanoid.MaxHealth
+
+	-- Start 15 studs to the player's left, about to strafe across their aim.
+	local startPos = Vector3.new(head.Position.X - 15, 3, head.Position.Z - 20)
+	bot:PivotTo(CFrame.new(startPos))
+	task.wait(0.3) -- let HitboxHistory record the stationary start
+
+	local PING = 0.2 -- Gate 4 target
+	local INTERP_BUFFER = 0.08 -- matches CombatService's INTERPOLATION_BUFFER
+	local moveDelta = Vector3.new(30, 0, 0)
+	local moveDuration = 1.0 -- 30 studs/s strafe
+	local moveStart = workspace:GetServerTimeNow()
+	local mover = RunService.Heartbeat:Connect(function()
+		local t = math.clamp((workspace:GetServerTimeNow() - moveStart) / moveDuration, 0, 1)
+		bot:PivotTo(CFrame.new(startPos + moveDelta * t))
+	end)
+	task.wait(moveDuration)
+	mover:Disconnect()
+	task.wait(0.05)
+
+	-- What a 200ms-ping client would have rendered: the bot's rewound
+	-- position, not where it is now.
+	local renderTime = workspace:GetServerTimeNow() - (PING + INTERP_BUFFER)
+	local rendered = HitboxHistory.RewindTo(bot, renderTime)
+	local botHead = bot:FindFirstChild("Head") :: BasePart
+	if not rendered or not rendered["Head"] then
+		diag("gate4 FAIL setup: no rewind history for bot")
+		BotService.SetPaused(false)
+		return
+	end
+	local renderedHeadPos = (rendered["Head"] :: CFrame).Position
+	local liveDrift = (renderedHeadPos - botHead.Position).Magnitude
+	diag(string.format("gate4 setup rendered_vs_live_drift=%.1f studs (ping=%.0fms)", liveDrift, PING * 1000))
+
+	CombatService.SetSimulatedPing(player, PING)
+	local now = workspace:GetServerTimeNow()
+	local result = CombatService.HandleFire(player, {
+		WeaponId = "AR_Standard",
+		Origin = head.Position,
+		Direction = (renderedHeadPos - head.Position).Unit,
+		Target = bot,
+		HitPosition = renderedHeadPos,
+		HitPart = "Head",
+		Timestamp = now,
+		ServerTick = now,
+		ShotId = "selftest-gate4",
+	})
+	CombatService.SetSimulatedPing(player, nil)
+
+	local failures = {}
+	local got = if result.Valid then "OK" else tostring(result.RejectReason)
+	diag(
+		string.format(
+			"gate4 200ms_ping_hit -> %-17s dmg=%s drift=%.1f botHP=%d",
+			got,
+			tostring(result.Damage or 0),
+			liveDrift,
+			math.floor(botHumanoid.Health)
+		)
+	)
+	if not result.Valid then
+		table.insert(failures, "rendered-position shot at 200ms ping rejected: " .. tostring(result.RejectReason))
+	elseif botHumanoid.Health >= botHumanoid.MaxHealth then
+		table.insert(failures, "rendered-position shot dealt no damage")
+	end
+	if liveDrift < 1 then
+		table.insert(failures, "setup invalid: target barely moved, test proves nothing")
+	end
+
+	diag(if #failures == 0 then "gate4 PASS" else "gate4 FAIL: " .. table.concat(failures, "; "))
+	BotService.SetPaused(false)
+end
+
 function SelfTest.run()
 	diag("start")
 
@@ -210,6 +312,12 @@ function SelfTest.run()
 		task.wait(2)
 		snapshot(string.format("post t=%ds", i * 2))
 	end
+
+	xpcall(probeLagComp, function(err)
+		diag("gate4 FAIL error: " .. tostring(err))
+	end)
+
+	require(script.Parent.Services.PerfMonitor).FlushReport()
 
 	diag("end")
 	local ok, err = pcall(function()

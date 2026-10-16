@@ -10,6 +10,7 @@ local ReplicatedStorage = game:GetService("ReplicatedStorage")
 
 local MovementConfig = require(ReplicatedStorage.Shared.Config.Movement)
 local Net = require(ReplicatedStorage.Shared.Net)
+local PerfMonitor = require(script.Parent.PerfMonitor)
 
 local MovementService = {}
 
@@ -58,9 +59,9 @@ function MovementService.Init()
 	end)
 
 	-- Periodic position validation
-	RunService.Heartbeat:Connect(function(dt)
+	RunService.Heartbeat:Connect(PerfMonitor.Track("MovementService", function(dt)
 		MovementService.ValidatePositions(dt)
-	end)
+	end))
 
 	print("[MovementService] Initialized")
 end

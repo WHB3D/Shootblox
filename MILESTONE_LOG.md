@@ -15,16 +15,16 @@
 
 ---
 
-## Gate 2: Core Combat (Week 3-4) — PENDING
+## Gate 2: Core Combat (Week 3-4) — PASSED ✅
 
 | Checkpoint | Status | Evidence |
 |------------|--------|----------|
-| Spoofed FireEvent deals 0 damage | ⏳ | — |
-| Legit shots kill | ⏳ | — |
-| Rejects logged with codes | ⏳ | — |
-| Hits register at 200 ms ping | ⏳ | — |
-| Wallbangs rejected | ⏳ | — |
-| Heartbeat ≤ 8 ms | ⏳ | — |
+| Spoofed FireEvent deals 0 damage | ✅ | `sb-test.sh` gate3: stale timestamp, origin spoof, hit spoof, self-hit → 0 dmg, suspicion logged (4963ef8, 2026-10-15) |
+| Legit shots kill | ✅ | gate3: 2 legit headshots, 56 dmg each, bot HP 100 → -12 |
+| Rejects logged with codes | ✅ | `INVALID_TIMESTAMP`/`INVALID_ORIGIN`/`INVALID_TARGET`/`INVALID_LOS`/`INVALID_RATE` all observed with `FlagSuspicion` warnings |
+| Hits register at 200 ms ping | ✅ | 2026-10-17, `sb-test.sh` gate4 (reproduced twice): shot at bot's 200ms-rewound rendered position (6.0–6.5 studs behind live) lands through the real pipeline |
+| Wallbangs rejected | ✅ | gate3: shot through a Concrete wall → `INVALID_LOS`, 0 dmg |
+| Heartbeat ≤ 8 ms | ✅ | 2026-10-17, `PerfMonitor` sums actual script time in Shootblox's own Heartbeat handlers: avg/max 0.00ms, 0/~900 frames over budget per run |
 
 ---
 
