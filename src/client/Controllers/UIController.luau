@@ -168,14 +168,15 @@ function UIController.CreateHUD()
 		line.BorderSizePixel = 0
 		line.Parent = crosshairFrame
 
+		-- Initial gap; SetCrosshairSpread repositions these every frame
 		if i == 1 then
-			line.Position = UDim2.fromScale(0.5, 0.2)
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(0, -8)
 		elseif i == 2 then
-			line.Position = UDim2.fromScale(0.5, 0.8)
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(0, 8)
 		elseif i == 3 then
-			line.Position = UDim2.fromScale(0.2, 0.5)
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(-8, 0)
 		elseif i == 4 then
-			line.Position = UDim2.fromScale(0.8, 0.5)
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(8, 0)
 		end
 
 		local lineCorner = Instance.new("UICorner")
@@ -265,6 +266,33 @@ function UIController.UpdateAmmoDisplay()
 	-- Color change when low
 	if ammoText then
 		ammoText.TextColor3 = currentAmmo <= 5 and Color3.fromRGB(255, 80, 80) or Color3.fromRGB(255, 255, 255)
+	end
+end
+
+-- Live spread readout (Blueprint §6.1.2): gap tracks the weapon's actual
+-- current spread (base + bloom + movement, before crouch/ADS reduction is
+-- folded in by the caller), and the crosshair hides as ADS progresses.
+function UIController.SetCrosshairSpread(spreadDegrees: number, adsProgress: number)
+	if not crosshairFrame then
+		return
+	end
+	local gap = math.clamp(6 + spreadDegrees * 5, 4, 46)
+	local transparency = math.clamp(adsProgress, 0, 1)
+	for i = 1, 4 do
+		local line = crosshairFrame:FindFirstChild("Line" .. i)
+		if not line or not line:IsA("Frame") then
+			continue
+		end
+		line.BackgroundTransparency = transparency
+		if i == 1 then
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(0, -gap)
+		elseif i == 2 then
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(0, gap)
+		elseif i == 3 then
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(-gap, 0)
+		elseif i == 4 then
+			line.Position = UDim2.fromScale(0.5, 0.5) + UDim2.fromOffset(gap, 0)
+		end
 	end
 end
 

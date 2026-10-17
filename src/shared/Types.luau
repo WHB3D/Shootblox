@@ -22,6 +22,9 @@ export type WeaponConfig = {
 	RecoilPattern: { Vector2 }?,
 	ViewModelOffset: CFrame?,
 	ADSSpeed: number?, -- frame-scaled lerp constant (1 - e^-k*dt); higher = snappier. Default in ViewmodelController.
+	ZoomFOV: number?, -- camera FOV at full ADS. Default in ViewmodelController.
+	EquipTime: number?, -- seconds before this weapon can fire/reload after being equipped. Default in GunController.
+	EmptyReloadMultiplier: number?, -- ReloadTime multiplier when the mag was empty (chambering a round takes longer). Default in CombatService.
 	Sounds: {
 		Fire: string?,
 		Reload: string?,

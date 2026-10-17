@@ -250,19 +250,30 @@ local function probeLagComp()
 	local liveDrift = (renderedHeadPos - botHead.Position).Magnitude
 	diag(string.format("gate4 setup rendered_vs_live_drift=%.1f studs (ping=%.0fms)", liveDrift, PING * 1000))
 
+	-- The real client (held mouse, if any) can legitimately fire this same
+	-- weapon around now; a collision on RateLimiter's last-shot-timestamp
+	-- is a test-isolation artifact, not a lag-comp failure — retry past it
+	-- rather than let it produce a false gate4 FAIL.
 	CombatService.SetSimulatedPing(player, PING)
-	local now = workspace:GetServerTimeNow()
-	local result = CombatService.HandleFire(player, {
-		WeaponId = "AR_Standard",
-		Origin = head.Position,
-		Direction = (renderedHeadPos - head.Position).Unit,
-		Target = bot,
-		HitPosition = renderedHeadPos,
-		HitPart = "Head",
-		Timestamp = now,
-		ServerTick = now,
-		ShotId = "selftest-gate4",
-	})
+	local result: any
+	for attempt = 1, 3 do
+		local now = workspace:GetServerTimeNow()
+		result = CombatService.HandleFire(player, {
+			WeaponId = "AR_Standard",
+			Origin = head.Position,
+			Direction = (renderedHeadPos - head.Position).Unit,
+			Target = bot,
+			HitPosition = renderedHeadPos,
+			HitPart = "Head",
+			Timestamp = now,
+			ServerTick = now,
+			ShotId = "selftest-gate4-" .. attempt,
+		})
+		if result.RejectReason ~= "INVALID_RATE" then
+			break
+		end
+		task.wait(0.5)
+	end
 	CombatService.SetSimulatedPing(player, nil)
 
 	local failures = {}

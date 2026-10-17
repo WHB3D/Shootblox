@@ -134,10 +134,10 @@ over the 8ms budget across ~900 frames/run.
 | Camera-parented VM rig (no-collision, no shadows) | ✅ `NoCollisionViewModel` group, `CastShadow=false`, driven via `BindToRenderStep` at `Camera.Value + 1` |
 | Ordered offset composition (array, not dict) | ✅ `{ aimCF, swayCF, bobCF, recoilCF }`, fold-multiplied in order |
 | Mouse-delta sway spring (8-substep) | ✅ `src/shared/Spring.luau` (verbatim Blueprint §6.1.1 reference module) |
-| ADS: AimPart lerp + FOV lerp | 🔄 position lerp done (frame-scaled, per-weapon `ADSSpeed`); FOV lerp not wired (no CameraController yet); literal AimPart part not built — no real weapon mesh to weld it to yet, `ViewModelOffset`/`ADS_OFFSET` stand in |
+| ADS: AimPart lerp + FOV lerp | ✅ position + FOV lerp both driven by the same `adsProgress` (frame-scaled, per-weapon `ADSSpeed`/`ZoomFOV`) + per-shot FOV punch on top; literal AimPart part still not built — no real weapon mesh to weld it to yet, `ViewModelOffset`/`ADS_OFFSET` stand in |
 | Procedural recoil split camera + VM | ✅ `recoilSpring` (viewmodel kickback) + `cameraKickSpring` (nudges live camera CFrame post-update), both under-damped, recovery starts only once shots stop shoving them |
-| Spread bloom + dynamic crosshair gap | ⏳ not started |
-| Equip time enforced; tactical vs empty reload | ⏳ not started (`ReloadTime` exists; equip-time + reload-cancel rules don't) |
+| Spread bloom + dynamic crosshair gap | ✅ `GunController.ComputeSpread`: per-shot growth, time decay, movement penalty, crouch (-40%) and ADS (up to -85%) reduction; `UIController.SetCrosshairSpread` reads it live each frame and hides the reticle as ADS progresses |
+| Equip time enforced; tactical vs empty reload | 🔄 equip time done (`WeaponConfig.EquipTime`, blocks fire/reload client-side); empty-vs-tactical reload timing done server-side (`EmptyReloadMultiplier`, checked against the real `Ammo_<id>` attribute); reload-cancel rules (cancel tactical by firing/swapping, can't cancel empty before chambering) not done |
 
 **Fixed the actual "gun swims" bug named in the Blueprint** (§6.1.1): the old code lerped
 the *entire* final CFrame (`viewmodelRoot.CFrame:Lerp(finalCF, ...)`), double-smoothing on
@@ -157,7 +157,18 @@ work; it just happened to get triggered live for the first time this session.
 **Gate 5 remaining:** slide-jump chain (structurally unblocked — nothing in
 `MovementController`/`MovementService` stops jumping out of a slide and carrying
 `slideVelocity`, but real chain *feel* needs a human playtest, not something the
-automated harness can judge), spread bloom/crosshair, equip-time/reload-cancel rules.
+automated harness can judge), reload-cancel rules.
+
+**Isolation bug found and fixed in the self-test itself (not the game):** running gate4's
+crafted probe shot can collide with a genuinely-held real mouse button firing the same
+weapon at nearly the same server timestamp — `RateLimiter` sees two near-simultaneous
+shots and rejects the second as `INVALID_RATE`, which is a test-isolation artifact, not a
+lag-comp failure. `probeLagComp` now retries past an `INVALID_RATE` result (up to 3x,
+0.5s apart) before treating it as a real failure. Observed the raw collision once (ammo
+drained faster than the deliberate test shot alone would explain — the running Studio
+window's real mouse-button state leaking into `UserInputService:IsMouseButtonPressed`
+during automation, not a code bug); confirmed clean and reproducible across 2 more runs
+after the retry fix.
 
 ---
 

@@ -380,6 +380,12 @@ function MovementController.SendInputState()
 	})
 end
 
+-- GunController folds this into the live spread-bloom readout (crouch
+-- reduces spread per the Gunfeel Checklist's Movement P0 row).
+function MovementController.IsCrouching(): boolean
+	return isCrouching
+end
+
 function MovementController.PlayAnimation(name: string) end
 
 return MovementController

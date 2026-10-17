@@ -68,6 +68,12 @@ local bobCycle = 0
 local HIP_OFFSET = CFrame.new(1.2, -0.8, 1.5)
 local ADS_OFFSET = CFrame.new(0, -0.2, 0.5)
 
+-- FOV: two simultaneous lerps per §6.1.2 (viewmodel offset above, camera FOV
+-- here), both driven by the same adsProgress so they land in lockstep.
+local BASE_FOV = 70
+local DEFAULT_ZOOM_FOV = 55
+local fovKick = 0 -- 1-2 degree punch per shot on automatics, decays per frame
+
 function ViewmodelController.Init()
 	viewmodel = Instance.new("Model")
 	viewmodel.Name = "Viewmodel"
@@ -233,6 +239,18 @@ function ViewmodelController.Update(dt: number)
 	if cameraKick.Magnitude > 1e-5 then
 		camera.CFrame *= CFrame.Angles(cameraKick.X, cameraKick.Y, 0)
 	end
+
+	-- FOV: ADS zoom lerp (same adsProgress as the viewmodel offset above)
+	-- plus a small decaying per-shot punch on top.
+	fovKick *= math.exp(-10 * dt)
+	local zoomFov = currentWeaponConfig.ZoomFOV or DEFAULT_ZOOM_FOV
+	camera.FieldOfView = BASE_FOV + (zoomFov - BASE_FOV) * adsProgress + fovKick
+end
+
+-- 0 (hip) .. 1 (fully aimed); GunController uses this to fold ADS into the
+-- live spread-bloom readout.
+function ViewmodelController.GetADSProgress(): number
+	return adsProgress
 end
 
 -- Local character's Humanoid + root, or nil if not spawned
@@ -292,6 +310,7 @@ function ViewmodelController.ApplyRecoil(recoilPattern: { Vector2 }?)
 	recoilSpring:shove(Vector3.new(pitch, yaw, 0))
 	cameraKickSpring:shove(Vector3.new(pitch * 1.5, yaw * 1.5, 0))
 	recoilAmount = math.min(recoilAmount + 1, 10)
+	fovKick = math.min(fovKick + 1.5, 6) -- §6.1.2: 1-2 deg FOV punch per shot, caps under sustained fire
 end
 
 function ViewmodelController.ResetRecoil()

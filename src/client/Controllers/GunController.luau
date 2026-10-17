@@ -15,6 +15,7 @@ local ContextActionService = game:GetService("ContextActionService")
 local Weapons = require(ReplicatedStorage.Shared.Config.Weapons)
 local Net = require(ReplicatedStorage.Shared.Net)
 local ViewmodelController = require(script.Parent.ViewmodelController)
+local MovementController = require(script.Parent.MovementController)
 local UIController = require(script.Parent.UIController)
 
 local GunController = {}
@@ -32,6 +33,17 @@ local reserveByWeapon: { [string]: number } = {}
 local isReloading = false
 local lastFireTime = 0
 local shotCounter = 0
+
+-- Equip time (§6.1.2 ViewModel P0: "Equip time enforced")
+local DEFAULT_EQUIP_TIME = 0.3
+local equipReadyAt = 0
+
+-- Spread bloom (§6.1.2): per-shot growth, time decay, movement penalty,
+-- crouch/ADS reduction, first-shot accuracy (free from decay between bursts)
+local BLOOM_GROWTH_MULT = 0.6 -- added per shot, scaled by the weapon's base spread
+local BLOOM_MAX_MULT = 3 -- cap on top of base spread
+local BLOOM_DECAY_RATE = 6 -- per second, exponential
+local currentBloom = 0
 
 -- Random direction inside a cone of `degrees` around `direction`
 local function applySpread(direction: Vector3, degrees: number): Vector3
@@ -110,8 +122,9 @@ function GunController.Init()
 
 	-- ADS handled by ViewmodelController (RightShift / MouseButton2)
 
-	RunService.RenderStepped:Connect(function()
+	RunService.RenderStepped:Connect(function(dt: number)
 		GunController.UpdateFiring()
+		GunController.UpdateBloom(dt)
 	end)
 
 	print("[GunController] Initialized")
@@ -128,6 +141,8 @@ function GunController.EquipWeapon(weaponId: string, slot: string)
 	currentSlot = slot
 	currentWeaponConfig = config
 	isReloading = false
+	currentBloom = 0
+	equipReadyAt = os.clock() + (config.EquipTime or DEFAULT_EQUIP_TIME)
 
 	-- Pick up where the server says this weapon's magazine is
 	local stored = player:GetAttribute("Ammo_" .. weaponId)
@@ -177,10 +192,39 @@ function GunController.UpdateFiring()
 	end
 end
 
+-- Live spread: base weapon spread plus bloom (grown per shot, decayed over
+-- time — a fresh first shot after a pause is near-base), scaled by movement
+-- (penalty), crouch (reduction), and ADS (heavy reduction).
+function GunController.ComputeSpread(config: Weapons.WeaponConfig): number
+	local total = config.Spread + math.min(currentBloom, config.Spread * BLOOM_MAX_MULT)
+
+	local character = player.Character
+	local root = character and character:FindFirstChild("HumanoidRootPart")
+	if root and root:IsA("BasePart") then
+		local speed = root.AssemblyLinearVelocity.Magnitude
+		total *= 1 + math.clamp(speed / 30, 0, 1) * 0.6
+	end
+
+	if MovementController.IsCrouching() then
+		total *= 0.6
+	end
+
+	total *= 1 - ViewmodelController.GetADSProgress() * 0.85
+	return total
+end
+
+function GunController.UpdateBloom(dt: number)
+	currentBloom *= math.exp(-BLOOM_DECAY_RATE * dt)
+	local spread = if currentWeaponConfig
+		then GunController.ComputeSpread(currentWeaponConfig :: Weapons.WeaponConfig)
+		else 0
+	UIController.SetCrosshairSpread(spread, ViewmodelController.GetADSProgress())
+end
+
 function GunController.FireOnce()
 	local weaponId = currentWeapon
 	local config = currentWeaponConfig
-	if not weaponId or not config or isReloading then
+	if not weaponId or not config or isReloading or os.clock() < equipReadyAt then
 		return
 	end
 	if os.clock() - lastFireTime < 1 / config.FireRate then
@@ -196,6 +240,9 @@ function GunController.FireOnce()
 		return
 	end
 
+	local spread = GunController.ComputeSpread(config)
+	currentBloom += config.Spread * BLOOM_GROWTH_MULT
+
 	currentAmmo -= 1
 	lastFireTime = os.clock()
 	shotCounter += 1
@@ -204,7 +251,7 @@ function GunController.FireOnce()
 
 	-- Raycast what this client sees; the server re-checks every claim
 	local origin = camera.CFrame.Position
-	local direction = applySpread(camera.CFrame.LookVector, config.Spread)
+	local direction = applySpread(camera.CFrame.LookVector, spread)
 	local params = RaycastParams.new()
 	params.FilterType = Enum.RaycastFilterType.Exclude
 	params.FilterDescendantsInstances = { character, camera }
@@ -231,7 +278,7 @@ end
 function GunController.Reload()
 	local weaponId = currentWeapon
 	local config = currentWeaponConfig
-	if not weaponId or not config or isReloading then
+	if not weaponId or not config or isReloading or os.clock() < equipReadyAt then
 		return
 	end
 	if currentAmmo >= config.MagSize or (reserveByWeapon[weaponId] or 0) <= 0 then

@@ -107,10 +107,14 @@ function CombatService.Init()
 		if not weapon or (ReloadingUntil[player] or 0) > os.clock() then
 			return
 		end
-		-- The magazine is refilled only after the weapon's reload time; shots
-		-- in between are rejected by CheckAmmo
-		ReloadingUntil[player] = os.clock() + weapon.ReloadTime
-		task.delay(weapon.ReloadTime, function()
+		-- Tactical (mag still has rounds) vs empty (must chamber a round):
+		-- empty takes longer. The magazine is refilled only after that
+		-- delay; shots in between are rejected by CheckAmmo.
+		local stored = player:GetAttribute("Ammo_" .. data.WeaponId)
+		local isEmpty = (if typeof(stored) == "number" then stored else weapon.MagSize) <= 0
+		local reloadTime = weapon.ReloadTime * (isEmpty and (weapon.EmptyReloadMultiplier or 1.3) or 1)
+		ReloadingUntil[player] = os.clock() + reloadTime
+		task.delay(reloadTime, function()
 			ReloadingUntil[player] = nil
 			if player.Parent then
 				player:SetAttribute("Ammo_" .. data.WeaponId, weapon.MagSize)
