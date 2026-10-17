@@ -137,7 +137,7 @@ over the 8ms budget across ~900 frames/run.
 | ADS: AimPart lerp + FOV lerp | ✅ position + FOV lerp both driven by the same `adsProgress` (frame-scaled, per-weapon `ADSSpeed`/`ZoomFOV`) + per-shot FOV punch on top; literal AimPart part still not built — no real weapon mesh to weld it to yet, `ViewModelOffset`/`ADS_OFFSET` stand in |
 | Procedural recoil split camera + VM | ✅ `recoilSpring` (viewmodel kickback) + `cameraKickSpring` (nudges live camera CFrame post-update), both under-damped, recovery starts only once shots stop shoving them |
 | Spread bloom + dynamic crosshair gap | ✅ `GunController.ComputeSpread`: per-shot growth, time decay, movement penalty, crouch (-40%) and ADS (up to -85%) reduction; `UIController.SetCrosshairSpread` reads it live each frame and hides the reticle as ADS progresses |
-| Equip time enforced; tactical vs empty reload | 🔄 equip time done (`WeaponConfig.EquipTime`, blocks fire/reload client-side); empty-vs-tactical reload timing done server-side (`EmptyReloadMultiplier`, checked against the real `Ammo_<id>` attribute); reload-cancel rules (cancel tactical by firing/swapping, can't cancel empty before chambering) not done |
+| Equip time enforced; tactical vs empty reload | ✅ equip time (`WeaponConfig.EquipTime`), empty-vs-tactical reload timing (`EmptyReloadMultiplier`), and reload-cancel (firing a tactical reload cancels it server-side and spends ammo immediately via `CombatService.HandleReload`/`CheckAmmo`; firing during an empty reload still rejects `INVALID_AMMO`; swapping weapons no longer blocks the new weapon's fire — `ReloadingUntil` is now keyed per-weapon, not per-player) |
 
 **Fixed the actual "gun swims" bug named in the Blueprint** (§6.1.1): the old code lerped
 the *entire* final CFrame (`viewmodelRoot.CFrame:Lerp(finalCF, ...)`), double-smoothing on
@@ -157,7 +157,12 @@ work; it just happened to get triggered live for the first time this session.
 **Gate 5 remaining:** slide-jump chain (structurally unblocked — nothing in
 `MovementController`/`MovementService` stops jumping out of a slide and carrying
 `slideVelocity`, but real chain *feel* needs a human playtest, not something the
-automated harness can judge), reload-cancel rules.
+automated harness can judge). Reload-cancel done (2026-10-17): verified PASS twice live
+via `sb-test.sh` (`gate5reload PASS`); a third run hit `INVALID_STATE` (player likely
+died/respawned mid-probe) — same class of real-mouse-interference artifact as the
+RateLimiter collisions below, not re-chased further this session (Wahab was at the
+keyboard; paused live Studio testing rather than add more tolerance for an environmental
+condition that shouldn't exist once testing happens with the computer actually idle).
 
 **Isolation bug found and fixed in the self-test itself (not the game):** running gate4's
 crafted probe shot can collide with a genuinely-held real mouse button firing the same

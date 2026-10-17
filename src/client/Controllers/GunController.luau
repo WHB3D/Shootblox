@@ -31,6 +31,7 @@ local currentSlot: string?
 local currentAmmo = 0
 local reserveByWeapon: { [string]: number } = {}
 local isReloading = false
+local reloadWasEmpty = false -- an empty reload can't be interrupted by firing; a tactical one can
 local lastFireTime = 0
 local shotCounter = 0
 
@@ -86,6 +87,14 @@ function GunController.Init()
 			ViewmodelController.SetReloading(false)
 			ViewmodelController.ResetRecoil()
 			GunController.UpdateAmmoUI()
+		end
+	end)
+
+	-- Server cancelled a tactical reload because we fired through it
+	Net.ClientListen("ReloadCancelled", function(data: { WeaponId: string })
+		if data.WeaponId == currentWeapon then
+			isReloading = false
+			ViewmodelController.SetReloading(false)
 		end
 	end)
 
@@ -224,7 +233,10 @@ end
 function GunController.FireOnce()
 	local weaponId = currentWeapon
 	local config = currentWeaponConfig
-	if not weaponId or not config or isReloading or os.clock() < equipReadyAt then
+	-- A tactical reload (mag wasn't empty) is allowed through so it reaches
+	-- the server and cancels there (Net "ReloadCancelled"); an empty reload
+	-- (chambering a round) blocks fire locally the same as before.
+	if not weaponId or not config or (isReloading and reloadWasEmpty) or os.clock() < equipReadyAt then
 		return
 	end
 	if os.clock() - lastFireTime < 1 / config.FireRate then
@@ -285,6 +297,7 @@ function GunController.Reload()
 		return
 	end
 	isReloading = true
+	reloadWasEmpty = currentAmmo <= 0
 	ViewmodelController.SetReloading(true)
 	-- TODO: ViewmodelController.PlayAnimation("Reload")
 	Net.ClientFire("Reload", { WeaponId = weaponId })

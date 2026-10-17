@@ -41,6 +41,7 @@ local SERVER_TO_CLIENT = {
 	"AmmoUpdate",
 	"HealthUpdate",
 	"Reloaded",
+	"ReloadCancelled",
 }
 
 -- Remotes live under ReplicatedStorage/Net; the server creates them once.

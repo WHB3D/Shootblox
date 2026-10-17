@@ -51,8 +51,11 @@ local ValidationCode = {
 }
 CombatService.Codes = ValidationCode
 
--- Server clock (os.clock) time each player's reload finishes
-local ReloadingUntil: { [Player]: number } = {}
+-- Server clock (os.clock) time each weapon's reload finishes, per player.
+-- Keyed per-weapon (not per-player) so reloading weapon A never blocks
+-- firing weapon B after a swap.
+type ReloadState = { Until: number, WasEmpty: boolean }
+local ReloadingUntil: { [Player]: { [string]: ReloadState } } = {}
 
 -- Studio self-test only: GetNetworkPing() is always ~0 in Play Solo (no real
 -- network), so Gate 4's "hits register at 200ms ping" can't be exercised
@@ -100,27 +103,9 @@ function CombatService.Init()
 	end)
 
 	Net.ClientToServer.Reload:Connect(function(player: Player, data: { WeaponId: string })
-		if typeof(data) ~= "table" or typeof(data.WeaponId) ~= "string" then
-			return
+		if typeof(data) == "table" then
+			CombatService.HandleReload(player, data)
 		end
-		local weapon = Weapons.Get(data.WeaponId)
-		if not weapon or (ReloadingUntil[player] or 0) > os.clock() then
-			return
-		end
-		-- Tactical (mag still has rounds) vs empty (must chamber a round):
-		-- empty takes longer. The magazine is refilled only after that
-		-- delay; shots in between are rejected by CheckAmmo.
-		local stored = player:GetAttribute("Ammo_" .. data.WeaponId)
-		local isEmpty = (if typeof(stored) == "number" then stored else weapon.MagSize) <= 0
-		local reloadTime = weapon.ReloadTime * (isEmpty and (weapon.EmptyReloadMultiplier or 1.3) or 1)
-		ReloadingUntil[player] = os.clock() + reloadTime
-		task.delay(reloadTime, function()
-			ReloadingUntil[player] = nil
-			if player.Parent then
-				player:SetAttribute("Ammo_" .. data.WeaponId, weapon.MagSize)
-				Net.ServerFire(player, "Reloaded", { WeaponId = data.WeaponId, Ammo = weapon.MagSize })
-			end
-		end)
 	end)
 
 	Players.PlayerRemoving:Connect(function(player)
@@ -129,6 +114,42 @@ function CombatService.Init()
 	end)
 
 	print("[CombatService] Initialized - 11-step validation pipeline active")
+end
+
+-- One Reload remote, end to end (also driven directly by SelfTest)
+function CombatService.HandleReload(player: Player, data: { WeaponId: string })
+	if typeof(data.WeaponId) ~= "string" then
+		return
+	end
+	local weapon = Weapons.Get(data.WeaponId)
+	local existing = ReloadingUntil[player] and ReloadingUntil[player][data.WeaponId]
+	if not weapon or (existing and existing.Until > os.clock()) then
+		return
+	end
+	-- Tactical (mag still has rounds) vs empty (must chamber a round):
+	-- empty takes longer, and can't be cancelled by firing (CheckAmmo). The
+	-- magazine is refilled only after that delay.
+	local stored = player:GetAttribute("Ammo_" .. data.WeaponId)
+	local isEmpty = (if typeof(stored) == "number" then stored else weapon.MagSize) <= 0
+	local reloadTime = weapon.ReloadTime * (isEmpty and (weapon.EmptyReloadMultiplier or 1.3) or 1)
+	local reloads = ReloadingUntil[player]
+	if not reloads then
+		reloads = {}
+		ReloadingUntil[player] = reloads
+	end
+	local scheduled: ReloadState = { Until = os.clock() + reloadTime, WasEmpty = isEmpty }
+	reloads[data.WeaponId] = scheduled
+	task.delay(reloadTime, function()
+		-- Only finish if this exact reload wasn't cancelled (fire during a
+		-- tactical reload clears the entry in CheckAmmo) or superseded by a
+		-- newer one.
+		local current = ReloadingUntil[player] and ReloadingUntil[player][data.WeaponId]
+		if current == scheduled and player.Parent then
+			ReloadingUntil[player][data.WeaponId] = nil
+			player:SetAttribute("Ammo_" .. data.WeaponId, weapon.MagSize)
+			Net.ServerFire(player, "Reloaded", { WeaponId = data.WeaponId, Ammo = weapon.MagSize })
+		end
+	end)
 end
 
 -- One Fire remote, end to end (also driven directly by SelfTest)
@@ -389,10 +410,17 @@ function CombatService.CalculateDamage(weapon: WeaponConfig, range: number, head
 	return { Valid = true, Damage = finalDamage }
 end
 
--- STEP 11: ammo lives on a player attribute (set by WeaponService)
+-- STEP 11: ammo lives on a player attribute (set by WeaponService). A
+-- tactical reload (mag wasn't empty when it started) is cancelled by
+-- firing; an empty reload (chambering a round) can't be interrupted.
 function CombatService.CheckAmmo(player: Player, request: ShotRequest, weapon: WeaponConfig): ValidationResult
-	if (ReloadingUntil[player] or 0) > os.clock() then
-		return reject(ValidationCode.InvalidAmmo)
+	local reload = ReloadingUntil[player] and ReloadingUntil[player][request.WeaponId]
+	if reload and reload.Until > os.clock() then
+		if reload.WasEmpty then
+			return reject(ValidationCode.InvalidAmmo)
+		end
+		ReloadingUntil[player][request.WeaponId] = nil
+		Net.ServerFire(player, "ReloadCancelled", { WeaponId = request.WeaponId })
 	end
 	local stored = player:GetAttribute("Ammo_" .. request.WeaponId)
 	local currentAmmo = if typeof(stored) == "number" then stored else weapon.MagSize

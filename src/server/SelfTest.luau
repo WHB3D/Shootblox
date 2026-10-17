@@ -300,6 +300,90 @@ local function probeLagComp()
 	BotService.SetPaused(false)
 end
 
+-- Gate 5: firing cancels a TACTICAL reload (ammo spends immediately, no
+-- wait for the reload to finish); firing during an EMPTY reload (chambering
+-- a round) still rejects — proves the real server-authoritative state
+-- machine, not just the client-side gating.
+local function probeReloadCancel()
+	local CombatService = require(script.Parent.Services.CombatService) :: any
+	local Weapons = require(ReplicatedStorage.Shared.Config.Weapons) :: any
+
+	local player = Players:GetPlayers()[1]
+	local character = player and player.Character
+	local head = character and character:FindFirstChild("Head")
+	if not (player and head and head:IsA("BasePart")) then
+		diag("gate5reload FAIL setup: no player head")
+		return
+	end
+
+	-- A genuinely-held real mouse button can fire this same weapon around
+	-- the same moment (see Gate 4's probeLagComp) and collide with
+	-- RateLimiter's last-shot-timestamp; retry past that before treating it
+	-- as this probe's real result.
+	local function missShot(shotId: string): any
+		local result: any
+		for attempt = 1, 3 do
+			local now = workspace:GetServerTimeNow()
+			result = CombatService.HandleFire(player, {
+				WeaponId = "AR_Standard",
+				Origin = head.Position,
+				Direction = head.CFrame.LookVector,
+				Timestamp = now,
+				ServerTick = now,
+				ShotId = shotId .. "-" .. attempt,
+			})
+			if result.RejectReason ~= "INVALID_RATE" then
+				break
+			end
+			task.wait(0.3)
+		end
+		return result
+	end
+
+	local failures = {}
+	task.wait(0.2) -- clear RateLimiter's window from whatever AR_Standard shot came before this probe
+
+	-- Tactical: mag has rounds, so firing should cancel the reload and spend
+	-- ammo right away instead of waiting out the reload timer.
+	player:SetAttribute("Ammo_AR_Standard", 10)
+	CombatService.HandleReload(player, { WeaponId = "AR_Standard" })
+	local tacticalResult = missShot("selftest-reload-tactical")
+	local afterTactical = player:GetAttribute("Ammo_AR_Standard")
+	diag(
+		string.format(
+			"gate5reload tactical_fire -> %-10s ammo=%s (want OK, ammo=9)",
+			if tacticalResult.Valid then "OK" else tostring(tacticalResult.RejectReason),
+			tostring(afterTactical)
+		)
+	)
+	if not tacticalResult.Valid then
+		table.insert(failures, "fire did not cancel a tactical reload: " .. tostring(tacticalResult.RejectReason))
+	elseif afterTactical ~= 9 then
+		table.insert(failures, "tactical reload cancel: ammo = " .. tostring(afterTactical) .. " (want 9)")
+	end
+
+	task.wait(0.2) -- clear RateLimiter's window between the two probe shots
+
+	-- Empty: mag is empty, chambering a round can't be interrupted by fire.
+	player:SetAttribute("Ammo_AR_Standard", 0)
+	CombatService.HandleReload(player, { WeaponId = "AR_Standard" })
+	local emptyResult = missShot("selftest-reload-empty")
+	diag(
+		string.format(
+			"gate5reload empty_fire    -> %-10s (want INVALID_AMMO)",
+			if emptyResult.Valid then "OK" else tostring(emptyResult.RejectReason)
+		)
+	)
+	if emptyResult.Valid or emptyResult.RejectReason ~= "INVALID_AMMO" then
+		table.insert(failures, "fire interrupted an empty reload: " .. tostring(emptyResult.RejectReason))
+	end
+
+	local weapon = Weapons.Get("AR_Standard")
+	player:SetAttribute("Ammo_AR_Standard", weapon and weapon.MagSize or 30)
+
+	diag(if #failures == 0 then "gate5reload PASS" else "gate5reload FAIL: " .. table.concat(failures, "; "))
+end
+
 function SelfTest.run()
 	diag("start")
 
@@ -326,6 +410,10 @@ function SelfTest.run()
 
 	xpcall(probeLagComp, function(err)
 		diag("gate4 FAIL error: " .. tostring(err))
+	end)
+
+	xpcall(probeReloadCancel, function(err)
+		diag("gate5reload FAIL error: " .. tostring(err))
 	end)
 
 	require(script.Parent.Services.PerfMonitor).FlushReport()
